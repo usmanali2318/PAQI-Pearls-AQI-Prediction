@@ -5,10 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "catboost>=1.2.10",
     "hopsworks[python]>=5.0.3",
     "joblib>=1.5.3",
+    "lightgbm>=4.7.0",
     "pandas>=2.3.3",
     "requests>=2.34.2",
     "scikit-learn>=1.9.0",
+    "shap>=0.52.0",
+    "streamlit>=1.60.0",
     "xgboost>=3.3.0",
 ]

@@ -2,7 +2,7 @@ name: Training Pipeline
 
 on:
   schedule:
-    - cron: "0 3 * * *"  # once daily, 3 AM UTC
+    - cron: "0 3 * * *"  # daily, both models trained back to back
   workflow_dispatch:
 
 jobs:
@@ -15,6 +15,11 @@ jobs:
           python-version: "3.13"
       - run: pip install -r requirements.txt
       - run: python training_pipeline.py
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+      - run: python training_pipeline_hourly.py
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}

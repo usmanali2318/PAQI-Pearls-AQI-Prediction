@@ -1,6 +1,13 @@
+run = "streamlit run main.py --server.address 0.0.0.0 --server.port 8501 --server.headless true"
+
 modules = ["python-base-3.13"]
 [agent]
 expertMode = true
 
 [nix]
 channel = "stable-25_05"
+packages = ["arrow-cpp", "c-ares", "cacert", "cargo", "glibcLocales", "grpc", "libiconv", "libxcrypt", "ocl-icd", "opencl-headers", "openssl", "pkg-config", "rdkafka", "rustc", "xsimd", "zlib"]
+
+[[ports]]
+localPort = 8501
+externalPort = 80
