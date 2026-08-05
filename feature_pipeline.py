@@ -21,9 +21,16 @@ POLLUTANTS = ["us_aqi", "pm2_5", "pm10", "carbon_monoxide", "nitrogen_dioxide", 
 RENAME = {"carbon_monoxide": "co", "nitrogen_dioxide": "no2", "sulphur_dioxide": "so2", "ozone": "o3", "us_aqi": "aqi"}
 
 def fetch_pollution_now(lat, lon):
-    r = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality", params={
-        "latitude": lat, "longitude": lon, "current": ",".join(POLLUTANTS)}).json()["current"]
-    return {RENAME.get(p, p): r[p] for p in POLLUTANTS}
+    for attempt in range(3):
+        try:
+            r = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality",
+                              params={"latitude": lat, "longitude": lon, "current": ",".join(POLLUTANTS)},
+                              timeout=30)
+            return {RENAME.get(p, p): r.json()["current"][p] for p in POLLUTANTS}
+        except Exception as e:
+            if attempt == 2:
+                raise
+            time.sleep(5)
 
 def fetch_city_row(city, points):
     names = list(points.keys())
