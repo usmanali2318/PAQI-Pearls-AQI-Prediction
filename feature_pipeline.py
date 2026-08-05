@@ -1,4 +1,4 @@
-import os, requests, pandas as pd, numpy as np
+import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timezone
 import hopsworks
 
