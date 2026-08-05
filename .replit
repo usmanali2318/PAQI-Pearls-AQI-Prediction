@@ -6,7 +6,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["arrow-cpp", "c-ares", "cacert", "cargo", "glibcLocales", "grpc", "libiconv", "libxcrypt", "ocl-icd", "opencl-headers", "openssl", "pkg-config", "rdkafka", "rustc", "xsimd", "zlib"]
+packages = ["arrow-cpp", "c-ares", "cacert", "cairo", "cargo", "chromedriver", "dos2unix", "ffmpeg-full", "freefont_ttf", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "lcms2", "libcxx", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "ocl-icd", "opencl-headers", "openjpeg", "openssl", "pkg-config", "qhull", "rdkafka", "rustc", "tcl", "tk", "xdg-utils", "xsimd", "zlib"]
 
 [[ports]]
 localPort = 8501

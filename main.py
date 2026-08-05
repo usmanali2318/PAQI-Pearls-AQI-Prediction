@@ -11,8 +11,8 @@ from training_pipeline import aggregate_daily, HORIZONS
 
 st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
 
-DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC"}
-LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539"}
+DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
+LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
 
 CATEGORIES = [(50, "Good", "#2ECC71"), (100, "Moderate", "#F1C40F"), (150, "Unhealthy for Sensitive Groups", "#E67E22"),
               (200, "Unhealthy", "#E74C3C"), (300, "Very Unhealthy", "#8E44AD"), (10_000, "Hazardous", "#7B241C")]
@@ -68,8 +68,11 @@ def inject_theme(city_key, dark_mode):
         background-image: url("data:image/webp;base64,{b64}");
         background-size: cover; background-position: center; background-attachment: fixed;
     }}
-    header[data-testid="stHeader"] {{ background: transparent; }}
+    header[data-testid="stHeader"] {{ background: transparent; display: none !important; }}
     #MainMenu {{ visibility: hidden; }}
+    [data-testid="stToolbar"] {{ display: none !important; }}
+    [data-testid="stDecoration"] {{ display: none !important; }}
+    [data-testid="stStatusWidget"] {{ display: none !important; }}
     .glass-card {{
         background: {p['card']}88; border: 1px solid {p['border']}88; border-radius: 14px;
         padding: 18px; backdrop-filter: blur(12px); margin-bottom: 14px;
@@ -91,7 +94,6 @@ def inject_theme(city_key, dark_mode):
 
     /* Pull everything up so there's no dead space under the ribbon */
     .block-container {{ padding-top: 5.25rem !important; padding-bottom: 2rem !important; }}
-    header[data-testid="stHeader"] {{ height: 0; min-height: 0; }}
 
     /* Ribbon banner: fixed + width:100% (not 100vw, which overshoots by the
        scrollbar's width and gets clipped) so it's flush with all 3 edges */
@@ -125,14 +127,26 @@ def inject_theme(city_key, dark_mode):
 
     .app-blurb {{ opacity: 0.85; margin: 0 0 10px 0; font-size: 0.95rem; }}
 
-    /* Theme the city dropdown (closed control + open menu) and shrink it a bit */
-    div[data-baseweb="select"] > div {{
-        background: {p['card']}dd !important; border-color: {p['border']}88 !important;
-        color: {p['text']} !important; min-height: 36px !important; font-size: 0.88rem !important;
+    /* Theme the city dropdown (closed control + open menu) and shrink it a bit.
+       BaseWeb nests several divs inside [data-baseweb="select"] and the exact
+       depth of the one actually carrying the background varies, so reset
+       everything to transparent first, then paint every plausible depth the
+       same color (harmless if more than one matches — they're identical). */
+    div[data-baseweb="select"] * {{ background-color: transparent !important; box-shadow: none !important; }}
+    div[data-baseweb="select"],
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="select"] > div > div,
+    div[data-baseweb="select"] > div > div > div {{
+        background-color: {p['card']} !important;
     }}
+    div[data-baseweb="select"] {{
+        border: 1px solid {p['shade']} !important; border-radius: 10px !important;
+        min-height: 36px !important; overflow: hidden;
+    }}
+    div[data-baseweb="select"] * {{ color: {p['text']} !important; font-size: 0.88rem !important; }}
     div[data-baseweb="select"] svg {{ fill: {p['text']} !important; }}
-    ul[data-baseweb="menu"] {{ background: {p['card']}f2 !important; }}
-    ul[data-baseweb="menu"] li {{ color: {p['text']} !important; font-size: 0.88rem !important; }}
+    ul[data-baseweb="menu"] {{ background: {p['card']} !important; border: 1px solid {p['shade']} !important; }}
+    ul[data-baseweb="menu"] li {{ color: {p['text']} !important; background: transparent !important; font-size: 0.88rem !important; }}
     li[role="option"]:hover, li[aria-selected="true"] {{ background: {p['accent']}33 !important; }}
 
     /* Merged current-AQI card (gauge + category badge as one unit) */
@@ -336,7 +350,8 @@ sc1.metric("Top increase", top_increase["feature"], f"+{top_increase['value']:.2
 sc2.metric("Top decrease", top_decrease["feature"], f"{top_decrease['value']:.2f}")
 
 fig_shap = px.bar(shap_df.tail(15), x="value", y="feature", orientation="h",
-                   color=shap_df.tail(15)["value"] > 0, color_discrete_map={True: "#E67E22", False: "#2ECC71"})
+                   color=shap_df.tail(15)["value"] > 0,
+                   color_discrete_map={True: palette["mid2"], False: palette["accent"]})
 fig_shap.update_layout(showlegend=False)
 style_fig(fig_shap, palette)
 st.plotly_chart(fig_shap, use_container_width=True)

@@ -3,7 +3,6 @@ model_dir_hourly/
 catboost_info/
 __pycache__/
 *.pyc
-*.txt
 *.log
 .python-version
 karachi_7point_test.py
