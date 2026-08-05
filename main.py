@@ -281,11 +281,11 @@ with st.container(key="current_aqi_card"):
         fig.update_layout(title=dict(text=""), paper_bgcolor="rgba(0,0,0,0)", font={"color": palette["text"]}, height=260, margin=dict(l=20, r=20, t=20, b=20))
         st.plotly_chart(fig, use_container_width=True)
     with c2:
-        updated_dt = pd.to_datetime(city_hourly["timestamp"].iloc[-1], unit="s")
+        updated_dt = pd.to_datetime(city_hourly["timestamp"].iloc[-1], unit="s", utc=True).tz_convert(ZoneInfo("Asia/Karachi"))
         st.markdown(f"""<div class="aqi-category-block">
             <h3>Current Air Quality</h3>
             <span class="badge" style="background:{cat_color}33; color:{cat_color};">{cat_label}</span>
-            <p style="margin-top:14px;">Updated {updated_dt.strftime("%b %d, %Y at %I:%M %p")}</p>
+            <p style="margin-top:14px;">Updated {updated_dt.strftime("%b %d, %Y at %I:%M %p")} PKT</p>
             </div>""", unsafe_allow_html=True)
 
 # --- Pollutant tiles ---
