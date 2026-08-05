@@ -17,20 +17,23 @@ CITIES = {
                "pashtunabad": (30.1900, 66.9500), "samungli": (30.2500, 66.9400)},
 }
 
-POLLUTANTS = ["us_aqi", "pm2_5", "pm10", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"]
-RENAME = {"carbon_monoxide": "co", "nitrogen_dioxide": "no2", "sulphur_dioxide": "so2", "ozone": "o3", "us_aqi": "aqi"}
+PM25_BP = [(0,12,0,50),(12.1,35.4,51,100),(35.5,55.4,101,150),(55.5,150.4,151,200),(150.5,250.4,201,300),(250.5,350.4,301,400),(350.5,500.4,401,500)]
+PM10_BP = [(0,54,0,50),(55,154,51,100),(155,254,101,150),(255,354,151,200),(355,424,201,300),(425,504,301,400),(505,604,401,500)]
+
+def us_aqi(pm25, pm10):
+    def sub(c, bp):
+        for lo, hi, ilo, ihi in bp:
+            if lo <= c <= hi:
+                return (ihi-ilo)/(hi-lo)*(c-lo)+ilo
+        return bp[-1][3]
+    return round(max(sub(pm25, PM25_BP), sub(pm10, PM10_BP)))
 
 def fetch_pollution_now(lat, lon):
-    for attempt in range(3):
-        try:
-            r = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality",
-                              params={"latitude": lat, "longitude": lon, "current": ",".join(POLLUTANTS)},
-                              timeout=30)
-            return {RENAME.get(p, p): r.json()["current"][p] for p in POLLUTANTS}
-        except Exception as e:
-            if attempt == 2:
-                raise
-            time.sleep(5)
+    r = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
+                      params={"lat": lat, "lon": lon, "appid": OWM_KEY}, timeout=30).json()["list"][0]
+    c = r["components"]
+    return {"aqi": us_aqi(c["pm2_5"], c["pm10"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
+            "co": c["co"], "no2": c["no2"], "so2": c["so2"], "o3": c["o3"]}
 
 def fetch_city_row(city, points):
     names = list(points.keys())
