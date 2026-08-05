@@ -1,4 +1,6 @@
 import os, base64, joblib
+import datetime as dt
+from zoneinfo import ZoneInfo
 import numpy as np, pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -14,20 +16,19 @@ LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9
 
 CATEGORIES = [(50, "Good", "#2ECC71"), (100, "Moderate", "#F1C40F"), (150, "Unhealthy for Sensitive Groups", "#E67E22"),
               (200, "Unhealthy", "#E74C3C"), (300, "Very Unhealthy", "#8E44AD"), (10_000, "Hazardous", "#7B241C")]
-def aqi_category(v):
-    for cutoff, label, color in CATEGORIES:
-        if v <= cutoff:
-            return label, color
-    return CATEGORIES[-1][1], CATEGORIES[-1][2]
+
+def aqi_band(value):
+    """First (cutoff, label, color) band whose cutoff covers `value`."""
+    return next((band for band in CATEGORIES if value <= band[0]), CATEGORIES[-1])
+
+def aqi_category(value):
+    return aqi_band(value)[1:]
 
 def aqi_band_ceiling(value):
-    """Smallest category cutoff >= value, so a y-axis anchored at [0, ceiling]
-    reflects the value's real position on the AQI scale instead of autoscaling
-    tightly to the data range (which makes a 2-point wobble look like a cliff)."""
-    for cutoff, _, _ in CATEGORIES:
-        if value <= cutoff:
-            return cutoff
-    return CATEGORIES[-1][0]
+    """Category cutoff for `value`, so a y-axis anchored at [0, ceiling] reflects
+    its real position on the AQI scale instead of autoscaling tightly to the data
+    range (which makes a 2-point wobble look like a cliff)."""
+    return aqi_band(value)[0]
 
 def hex_to_rgba(hex_color, alpha):
     h = hex_color.lstrip("#")
@@ -43,6 +44,7 @@ def style_fig(fig, palette):
     or labels silently default to a color that can vanish in light mode."""
     grid = hex_to_rgba(palette["text"], 0.12)
     fig.update_layout(
+        title=dict(text=""),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=palette["text"]),
@@ -80,27 +82,75 @@ def inject_theme(city_key, dark_mode):
         background: {p['card']}88; border: 1px solid {p['border']}88; border-radius: 14px;
         padding: 14px; backdrop-filter: blur(12px);
     }}
-    [data-testid="stPlotlyChart"] {{
-        background: {p['card']}88 !important; border: 1px solid {p['border']}88;
+    [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{
+        background: {p['card']}88; border: 1px solid {p['border']}88;
         border-radius: 14px; padding: 10px; backdrop-filter: blur(12px);
     }}
     h1, h2, h3, h4, p, label, span:not(.badge) {{ color: {p['text']} !important; }}
     .badge {{ display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; font-size:0.85em; }}
 
-    /* Align the dark/light toggle with the city selectbox on the same row */
-    div[data-testid="stHorizontalBlock"]:has(#topbar-anchor) {{ align-items: center; }}
-    div[data-testid="stHorizontalBlock"]:has(#topbar-anchor) [data-testid="stToggle"] {{
-        margin-top: 6px;
-    }}
+    /* Pull everything up so there's no dead space under the ribbon */
+    .block-container {{ padding-top: 5.25rem !important; padding-bottom: 2rem !important; }}
+    header[data-testid="stHeader"] {{ height: 0; min-height: 0; }}
 
-    /* Merged current-AQI card */
-    div[data-testid="stVerticalBlock"]:has(> div #current-aqi-anchor) {{
+    /* Ribbon banner: fixed + width:100% (not 100vw, which overshoots by the
+       scrollbar's width and gets clipped) so it's flush with all 3 edges */
+    .st-key-ribbon {{
+        position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+        background: {p['card']}66; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid {p['border']}66;
+        padding: 18px calc(2rem + 3vw);
+        display: flex; align-items: center;
+    }}
+    .st-key-ribbon > div {{ width: 100%; }}
+    .st-key-ribbon [data-testid="stHorizontalBlock"] {{
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 1rem; width: 100%;
+    }}
+    .st-key-ribbon [data-testid="stColumn"] {{ width: auto !important; flex: 0 0 auto !important; min-width: 0 !important; }}
+    .ribbon-clock {{ white-space: nowrap; opacity: 0.75; font-size: 0.9rem; line-height: 1; color: {p['text']} !important; }}
+    .ribbon-title {{
+        display: flex; align-items: center; line-height: 1; margin: 0;
+        font-size: 1.5rem; font-weight: 800; color: {p['text']} !important; letter-spacing: 0.3px;
+    }}
+    .ribbon-title span {{ font-weight: 400; opacity: 0.85; font-size: 1rem; line-height: 1; margin-left: 10px; color: {p['text']} !important; }}
+    .st-key-ribbon [data-testid="stMarkdownContainer"] {{ margin: 0; padding: 0; }}
+
+    /* Theme toggle, now inline with the city dropdown row, aligned to its control */
+    .st-key-city_row [data-testid="stButton"] {{ display: flex; justify-content: flex-end; }}
+    .st-key-city_row [data-testid="stButton"] button {{
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        color: {p['text']} !important; font-weight: 600; padding: 0 0 8px 0; white-space: nowrap; opacity: 0.85;
+    }}
+    .st-key-city_row [data-testid="stButton"] button:hover {{ text-decoration: underline; opacity: 1; }}
+
+    .app-blurb {{ opacity: 0.85; margin: 0 0 10px 0; font-size: 0.95rem; }}
+
+    /* Theme the city dropdown (closed control + open menu) and shrink it a bit */
+    div[data-baseweb="select"] > div {{
+        background: {p['card']}dd !important; border-color: {p['border']}88 !important;
+        color: {p['text']} !important; min-height: 36px !important; font-size: 0.88rem !important;
+    }}
+    div[data-baseweb="select"] svg {{ fill: {p['text']} !important; }}
+    ul[data-baseweb="menu"] {{ background: {p['card']}f2 !important; }}
+    ul[data-baseweb="menu"] li {{ color: {p['text']} !important; font-size: 0.88rem !important; }}
+    li[role="option"]:hover, li[aria-selected="true"] {{ background: {p['accent']}33 !important; }}
+
+    /* Merged current-AQI card (gauge + category badge as one unit) */
+    .st-key-current_aqi_card {{
         background: {p['card']}88; border: 1px solid {p['border']}88; border-radius: 14px;
         padding: 18px; backdrop-filter: blur(12px); margin-bottom: 14px;
+        display: flex; align-items: center;
     }}
-    div[data-testid="stVerticalBlock"]:has(> div #current-aqi-anchor) [data-testid="stPlotlyChart"] {{
-        background: transparent !important; border: none; padding: 0;
+    .st-key-current_aqi_card > div {{ width: 100%; }}
+    .st-key-current_aqi_card [data-testid="stHorizontalBlock"] {{
+        display: flex; align-items: center; gap: 2rem; width: 100%;
     }}
+    .st-key-current_aqi_card [data-testid="stColumn"] {{ flex: 1 1 0; }}
+    .st-key-current_aqi_card [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{
+        background: transparent !important; border: none !important; padding: 0 !important;
+        border-radius: 0 !important; backdrop-filter: none !important;
+    }}
+    .aqi-category-block {{ display: flex; flex-direction: column; align-items: flex-start; }}
     </style>
     """, unsafe_allow_html=True)
     return p
@@ -152,12 +202,37 @@ point_model, quantile_models, project = load_model()
 raw_df = load_recent_data(project)
 cities = sorted(raw_df["city"].unique())
 
-top_l, top_r = st.columns([3, 1], vertical_alignment="center")
-with top_l:
-    st.markdown('<span id="topbar-anchor"></span>', unsafe_allow_html=True)
-    city = st.selectbox("Select city", [c.title() for c in cities])
-with top_r:
-    dark_mode = st.toggle("Dark mode", value=False)
+st.session_state.setdefault("dark_mode", False)
+with st.container(key="ribbon"):
+    rb1, rb2 = st.columns([5, 1], gap="small", vertical_alignment="center")
+    with rb1:
+        st.markdown(
+            '<div class="ribbon-title">PAQI <span>Pearls AQI Predictor</span></div>',
+            unsafe_allow_html=True,
+        )
+    with rb2:
+        now_pk = dt.datetime.now(ZoneInfo("Asia/Karachi"))
+        st.markdown(
+            f'<span class="ribbon-clock">{now_pk.strftime("%b %d, %Y &middot; %I:%M %p PKT")}</span>',
+            unsafe_allow_html=True,
+        )
+dark_mode = st.session_state.dark_mode
+
+st.markdown(
+    '<p class="app-blurb">Machine-learning powered 3-day air quality forecasts for major '
+    "Pakistani cities, combining live pollutant readings with weather and seasonal patterns.</p>",
+    unsafe_allow_html=True,
+)
+
+with st.container(key="city_row"):
+    sel_col, _, btn_col = st.columns([1, 2, 1], vertical_alignment="bottom")
+    with sel_col:
+        city = st.selectbox("Select city", [c.title() for c in cities])
+    with btn_col:
+        theme_label = "Dark theme" if not st.session_state.dark_mode else "Light theme"
+        if st.button(theme_label, key="theme_btn"):
+            st.session_state.dark_mode = not st.session_state.dark_mode
+            st.rerun()
 city_key = city.lower()
 palette = inject_theme(city_key, dark_mode)
 
@@ -189,13 +264,14 @@ with st.container(key="current_aqi_card"):
             gauge={"axis": {"range": [0, 300], "tickcolor": palette["text"], "tickfont": {"color": palette["text"]}},
                    "bar": {"color": palette["accent"]},
                    "bgcolor": "rgba(0,0,0,0)", "borderwidth": 0}))
-        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={"color": palette["text"]}, height=260, margin=dict(l=20, r=20, t=20, b=20))
+        fig.update_layout(title=dict(text=""), paper_bgcolor="rgba(0,0,0,0)", font={"color": palette["text"]}, height=260, margin=dict(l=20, r=20, t=20, b=20))
         st.plotly_chart(fig, use_container_width=True)
     with c2:
-        st.markdown(f"""<h3>Current Air Quality</h3>
+        st.markdown(f"""<div class="aqi-category-block">
+            <h3>Current Air Quality</h3>
             <span class="badge" style="background:{cat_color}33; color:{cat_color};">{cat_label}</span>
             <p style="margin-top:14px;">Updated at hour {int(city_hourly['hour'].iloc[-1])}:00</p>
-            """, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
 # --- Pollutant tiles ---
 st.markdown("#### Current Pollutants")
