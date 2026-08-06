@@ -2,7 +2,7 @@ name: Feature Pipeline
 
 on:
   schedule:
-    - cron: "0 * * * *"  # every hour
+    - cron: "17 * * * *"  # every hour
   workflow_dispatch:  # allows manual trigger from GitHub UI
 
 jobs:
