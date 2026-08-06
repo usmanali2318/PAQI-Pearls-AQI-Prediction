@@ -29,6 +29,23 @@ def us_aqi(pm25, pm10):
     return round(max(sub(pm25, PM25_BP), sub(pm10, PM10_BP)))
 
 def fetch_pollution_now(lat, lon):
+    for attempt in range(3):
+        try:
+            r = requests.get(
+                "https://air-quality-api.open-meteo.com/v1/air-quality",
+                params={"latitude": lat, "longitude": lon,
+                        "current": "us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone"},
+                timeout=(20, 30),
+            )
+            r.raise_for_status()
+            c = r.json()["current"]
+            return {"aqi": round(c["us_aqi"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
+                    "co": c["carbon_monoxide"], "no2": c["nitrogen_dioxide"],
+                    "so2": c["sulphur_dioxide"], "o3": c["ozone"]}
+        except requests.RequestException:
+            if attempt < 2:
+                time.sleep(5)
+
     r = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
                       params={"lat": lat, "lon": lon, "appid": OWM_KEY}, timeout=30).json()["list"][0]
     c = r["components"]
