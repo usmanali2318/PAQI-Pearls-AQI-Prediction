@@ -1,7 +1,6 @@
 import os, base64, joblib
 import datetime as dt
 from zoneinfo import ZoneInfo
-import requests
 import numpy as np, pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -37,34 +36,6 @@ def hex_to_rgba(hex_color, alpha):
     return f"rgba({r},{g},{b},{alpha})"
 
 LAST_KNOWN_RMSE = {1: 8.73, 2: 16.73, 3: 19.23}  # from most recent training_pipeline.py evaluation run
-
-# Primary district point per city — mirrors the first entry in feature_pipeline.py's
-# CITIES dict, since that's the point OpenWeather's stored features are keyed on.
-PRIMARY_COORDS = {
-    "karachi": (24.8608, 67.0104),
-    "lahore": (31.5497, 74.3436),
-    "islamabad": (33.7100, 73.0550),
-    "peshawar": (34.0083, 71.5615),
-    "quetta": (30.1798, 66.9750),
-}
-
-@st.cache_data(ttl=600)
-def fetch_live_us_aqi(lat, lon):
-    """Live current-hour US AQI straight from Open-Meteo (same methodology IQAir
-    uses), fetched at dashboard load time from Streamlit Cloud — separate from the
-    OpenWeather-sourced values feature_pipeline.py stores hourly via GitHub Actions,
-    which is blocked from reaching Open-Meteo directly. Returns None on any failure
-    so callers can fall back to the last stored value instead of crashing the page."""
-    try:
-        r = requests.get(
-            "https://air-quality-api.open-meteo.com/v1/air-quality",
-            params={"latitude": lat, "longitude": lon, "current": "us_aqi"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        return round(r.json()["current"]["us_aqi"])
-    except Exception:
-        return None
 
 def style_fig(fig, palette):
     """Force every text element (title, legend, axis titles/ticks) to a theme-aware
@@ -290,9 +261,8 @@ preds_log = point_model.predict(X_latest)[0]
 preds = np.expm1(preds_log)
 
 city_hourly = raw_df[raw_df["city"] == city_key].sort_values("timestamp")
-prev_aqi = city_hourly["aqi"].iloc[-1]  # last stored (OpenWeather) reading, used as the delta baseline
-live_aqi = fetch_live_us_aqi(*PRIMARY_COORDS[city_key])
-current_aqi = live_aqi if live_aqi is not None else prev_aqi
+current_aqi = city_hourly["aqi"].iloc[-1]
+prev_aqi = city_hourly["aqi"].iloc[-2]
 cat_label, cat_color = aqi_category(current_aqi)
 
 st.title(f"{city} Air Quality")
@@ -311,15 +281,11 @@ with st.container(key="current_aqi_card"):
         fig.update_layout(title=dict(text=""), paper_bgcolor="rgba(0,0,0,0)", font={"color": palette["text"]}, height=260, margin=dict(l=20, r=20, t=20, b=20))
         st.plotly_chart(fig, use_container_width=True)
     with c2:
-        if live_aqi is not None:
-            updated_label = "Live just now"
-        else:
-            stored_dt = pd.to_datetime(city_hourly["timestamp"].iloc[-1], unit="s", utc=True).tz_convert(ZoneInfo("Asia/Karachi"))
-            updated_label = f'{stored_dt.strftime("%b %d, %Y at %I:%M %p")} PKT (last synced reading — live feed unavailable)'
+        stored_dt = pd.to_datetime(city_hourly["timestamp"].iloc[-1], unit="s", utc=True).tz_convert(ZoneInfo("Asia/Karachi"))
         st.markdown(f"""<div class="aqi-category-block">
             <h3>Current Air Quality</h3>
             <span class="badge" style="background:{cat_color}33; color:{cat_color};">{cat_label}</span>
-            <p style="margin-top:14px;">Updated {updated_label}</p>
+            <p style="margin-top:14px;">Updated {stored_dt.strftime("%b %d, %Y at %I:%M %p")} PKT</p>
             </div>""", unsafe_allow_html=True)
 
 # --- Pollutant tiles ---
@@ -335,7 +301,8 @@ c3, c4 = st.columns([2, 1])
 with c3:
     st.markdown("#### 24-Hour AQI Trend")
     last24 = city_hourly.tail(24)
-    fig24 = px.area(last24, x=pd.to_datetime(last24["timestamp"], unit="s"), y="aqi")
+    x_pkt = pd.to_datetime(last24["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
+    fig24 = px.area(last24, x=x_pkt, y="aqi")
     fig24.update_traces(line_color=palette["accent"], fillcolor=hex_to_rgba(palette["accent"], 0.2))
     style_fig(fig24, palette)
     fig24.update_yaxes(range=[0, aqi_band_ceiling(last24["aqi"].max())])
