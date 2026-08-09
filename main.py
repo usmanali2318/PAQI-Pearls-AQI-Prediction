@@ -172,16 +172,12 @@ def inject_theme(city_key, dark_mode):
     ul[data-baseweb="menu"] {{ background: {p['card']} !important; border: 1px solid {p['shade']} !important; }}
     ul[data-baseweb="menu"] li {{ color: {p['text']} !important; background: transparent !important; font-size: 0.88rem !important; }}
 
-    /* Streamlit's default primaryColor (red) drives the selected-radio-dot fill
-       and input focus rings — override with the theme's own accent instead. */
+    /* Streamlit's default primaryColor (red) drives input focus rings — override
+       with the theme's own accent. (Radio dot color comes from .streamlit/config.toml's
+       primaryColor instead — hand-guessing BaseWeb's internal DOM for that broke the
+       label text, since a broad `> div` selector painted over the text wrapper too.) */
     div[data-baseweb="select"]:focus-within {{
         border-color: {p['accent']} !important; box-shadow: 0 0 0 1px {p['accent']} !important;
-    }}
-    [data-testid="stRadio"] div[role="radiogroup"] label div:first-child {{
-        border-color: {p['accent']} !important;
-    }}
-    [data-testid="stRadio"] div[role="radiogroup"] label div:first-child > div {{
-        background-color: {p['accent']} !important;
     }}
     li[role="option"]:hover, li[aria-selected="true"] {{ background: {p['accent']}33 !important; }}
 
