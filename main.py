@@ -17,6 +17,30 @@ LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9
 CATEGORIES = [(50, "Good", "#2ECC71"), (100, "Moderate", "#F1C40F"), (150, "Unhealthy for Sensitive Groups", "#E67E22"),
               (200, "Unhealthy", "#E74C3C"), (300, "Very Unhealthy", "#8E44AD"), (10_000, "Hazardous", "#7B241C")]
 
+FEATURE_LABELS = {
+    "pm2_5": "PM2.5", "pm10": "PM10", "co": "Carbon Monoxide", "no2": "Nitrogen Dioxide", "so2": "Sulfur Dioxide",
+    "aqi": "Recent AQI Trend", "temp": "Temperature", "humidity": "Humidity", "pressure": "Pressure",
+    "wind_speed": "Wind Speed", "precip": "Precipitation", "wind_dir_sin": "Wind Direction", "wind_dir_cos": "Wind Direction",
+    "aqi_hourly_std": "AQI Volatility", "aqi_hourly_max": "Day's Peak AQI", "aqi_change_rate": "AQI Change Rate",
+    "dry_spell_days": "Dry Spell Length", "month": "Month", "day_of_week": "Day of Week",
+    "lag_1d": "AQI 1 Day Ago", "lag_2d": "AQI 2 Days Ago", "lag_3d": "AQI 3 Days Ago", "lag_7d": "AQI 1 Week Ago",
+    "rolling_mean_3d": "3-Day Avg AQI", "rolling_mean_7d": "7-Day Avg AQI", "rolling_mean_14d": "14-Day Avg AQI",
+    "rolling_std_7d": "7-Day AQI Volatility",
+    "is_winter_smog": "Winter Smog Season", "is_dust_season": "Dust Season", "is_monsoon": "Monsoon Season",
+    "month_sin": "Seasonal Cycle", "month_cos": "Seasonal Cycle",
+    "city_aqi_median": "City Median AQI", "city_aqi_max": "City Peak AQI", "city_aqi_min": "City Best AQI",
+    "city_aqi_spread": "City AQI Spread",
+    "district_1": "District 1 AQI", "district_2": "District 2 AQI", "district_3": "District 3 AQI",
+    "district_4": "District 4 AQI", "district_5": "District 5 AQI",
+}
+
+def friendly_feature_name(col):
+    if col in FEATURE_LABELS:
+        return FEATURE_LABELS[col]
+    if col.startswith("city_"):
+        return f"{col.removeprefix('city_').title()} (City)"
+    return col.replace("_", " ").title()
+
 def aqi_band(value):
     """First (cutoff, label, color) band whose cutoff covers `value`."""
     return next((band for band in CATEGORIES if value <= band[0]), CATEGORIES[-1])
@@ -147,6 +171,18 @@ def inject_theme(city_key, dark_mode):
     div[data-baseweb="select"] svg {{ fill: {p['text']} !important; }}
     ul[data-baseweb="menu"] {{ background: {p['card']} !important; border: 1px solid {p['shade']} !important; }}
     ul[data-baseweb="menu"] li {{ color: {p['text']} !important; background: transparent !important; font-size: 0.88rem !important; }}
+
+    /* Streamlit's default primaryColor (red) drives the selected-radio-dot fill
+       and input focus rings — override with the theme's own accent instead. */
+    div[data-baseweb="select"]:focus-within {{
+        border-color: {p['accent']} !important; box-shadow: 0 0 0 1px {p['accent']} !important;
+    }}
+    [data-testid="stRadio"] div[role="radiogroup"] label div:first-child {{
+        border-color: {p['accent']} !important;
+    }}
+    [data-testid="stRadio"] div[role="radiogroup"] label div:first-child > div {{
+        background-color: {p['accent']} !important;
+    }}
     li[role="option"]:hover, li[aria-selected="true"] {{ background: {p['accent']}33 !important; }}
 
     /* Merged current-AQI card (gauge + category badge as one unit) */
@@ -343,7 +379,7 @@ sub_model = point_model.estimators_[h_idx]
 background = X_latest if len(city_rows) < 30 else city_rows[feature_cols].sample(30, random_state=42)
 explainer = shap.Explainer(sub_model.predict, background)
 shap_values = explainer(X_latest)
-shap_df = pd.DataFrame({"feature": feature_cols, "value": shap_values.values[0]}).sort_values("value")
+shap_df = pd.DataFrame({"feature": [friendly_feature_name(c) for c in feature_cols], "value": shap_values.values[0]}).sort_values("value")
 top_increase = shap_df.iloc[-1]
 top_decrease = shap_df.iloc[0]
 
