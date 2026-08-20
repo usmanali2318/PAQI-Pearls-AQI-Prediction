@@ -14,6 +14,14 @@ st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
 DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
 LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
 
+# Fixed dropdown colors — must exactly match secondaryBackgroundColor/textColor in
+# .streamlit/config.toml. The dropdown's CLOSED control is colored by Streamlit's
+# native theme (config.toml), which we can't override with CSS regardless of light/
+# dark mode, so the OPEN menu list is force-matched to those same fixed values here
+# instead of following the page's palette, to avoid the two disagreeing.
+DROPDOWN_BG = "#7A8B7F"
+DROPDOWN_TEXT = "#E8FBFC"
+
 CATEGORIES = [(50, "Good", "#2ECC71"), (100, "Moderate", "#F1C40F"), (150, "Unhealthy for Sensitive Groups", "#E67E22"),
               (200, "Unhealthy", "#E74C3C"), (300, "Very Unhealthy", "#8E44AD"), (10_000, "Hazardous", "#7B241C")]
 
@@ -169,8 +177,8 @@ def inject_theme(city_key, dark_mode):
     }}
     div[data-baseweb="select"] * {{ color: {p['text']} !important; font-size: 0.88rem !important; }}
     div[data-baseweb="select"] svg {{ fill: {p['text']} !important; }}
-    ul[data-baseweb="menu"] {{ background: {p['card']} !important; border: 1px solid {p['shade']} !important; }}
-    ul[data-baseweb="menu"] li {{ color: {p['text']} !important; background: transparent !important; font-size: 0.88rem !important; }}
+    ul[data-baseweb="menu"] {{ background: {DROPDOWN_BG} !important; border: 1px solid {p['shade']} !important; }}
+    ul[data-baseweb="menu"] li {{ color: {DROPDOWN_TEXT} !important; background: transparent !important; font-size: 0.88rem !important; }}
 
     /* Streamlit's default primaryColor (red) drives input focus rings — override
        with the theme's own accent. (Radio dot color comes from .streamlit/config.toml's
