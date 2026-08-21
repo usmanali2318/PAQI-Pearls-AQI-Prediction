@@ -7,6 +7,7 @@ from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.base import clone
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
@@ -201,6 +202,51 @@ def train_eval(df):
 
     return best_name, best_model, quantile_models
 
+def recent_holdout_check(df, best_model, holdout_days=90):
+    """Supplementary check, alongside (not instead of) the scattered day%6 split
+    above: refit the exact winning model architecture on everything except the
+    trailing `holdout_days`, then evaluate purely on that trailing window, which
+    the model never saw in any form during training. The day%6 split proves the
+    model generalizes across every season in the dataset; this proves it can
+    genuinely forecast forward past its training cutoff, which is a different
+    and equally necessary claim before trusting it in production."""
+    target_cols = [f"target_{h}d" for h in HORIZONS]
+    X, y = df.drop(columns=["timestamp", "city", "date"] + target_cols), df[target_cols]
+    y_log = np.log1p(y)
+
+    cutoff = df["timestamp"].max() - holdout_days * 86400
+    train_mask = df["timestamp"] <= cutoff
+    X_train, X_test = X[train_mask], X[~train_mask]
+    y_train_log, y_test = y_log[train_mask], y[~train_mask]
+
+    if X_test.empty:
+        print(f"\nRecent-holdout check skipped: not enough data past the {holdout_days}-day cutoff yet.")
+        return
+
+    model = clone(best_model)
+    model.fit(X_train, y_train_log)
+    preds = np.expm1(model.predict(X_test))
+
+    persistence_preds = np.tile(df.loc[~train_mask, "aqi"].values.reshape(-1, 1), (1, len(HORIZONS)))
+    p_rmse = mean_squared_error(y_test, persistence_preds) ** 0.5
+    p_mae, p_r2 = mean_absolute_error(y_test, persistence_preds), r2_score(y_test, persistence_preds)
+    p_cat = category_accuracy(y_test.values, persistence_preds)
+
+    rmse = mean_squared_error(y_test, preds) ** 0.5
+    mae, r2 = mean_absolute_error(y_test, preds), r2_score(y_test, preds)
+    cat_acc = category_accuracy(y_test.values, preds)
+
+    print(f"\n=== Recent-holdout check: last {holdout_days} days, never seen in any form during this fit ===")
+    print(f"Train window ends: {pd.to_datetime(cutoff, unit='s').date()}  |  "
+          f"Test window: {pd.to_datetime(cutoff, unit='s').date()} -> {pd.to_datetime(df['timestamp'].max(), unit='s').date()}  "
+          f"(n={len(X_test)})")
+    print(f"Persistence baseline: RMSE={p_rmse:.2f}  MAE={p_mae:.2f}  R2={p_r2:.3f}  CategoryAcc={p_cat:.1%}")
+    print(f"Model on holdout:     RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}  CategoryAcc={cat_acc:.1%}")
+    verdict = "PASS — beats persistence on genuinely unseen recent data." if rmse < p_rmse else \
+              "FAIL — does not beat persistence on the recent holdout. Investigate before trusting this model forward."
+    print(f"Verdict: {verdict}")
+    print(per_horizon_metrics(y_test, preds))
+
 def save_to_registry(project, model, name, quantile_models):
     os.makedirs("model_dir", exist_ok=True)
     joblib.dump({"point_model": model, "quantile_models": quantile_models}, "model_dir/model.pkl")
@@ -265,5 +311,6 @@ if __name__ == "__main__":
     df = engineer(df)
     per_city_diagnostic(df)
     best_name, best_model, quantile_models = train_eval(df)
+    recent_holdout_check(df, best_model)
     save_to_registry(project, best_model, best_name, quantile_models)
     print("Model saved to Hopsworks Model Registry.")
