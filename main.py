@@ -397,3 +397,35 @@ fig_shap = px.bar(shap_df.tail(15), x="value", y="feature", orientation="h",
 fig_shap.update_layout(showlegend=False)
 style_fig(fig_shap, palette)
 st.plotly_chart(fig_shap, use_container_width=True)
+
+# --- Data Visualization & EDA ---
+with st.expander("📊 Data Visualization & EDA", expanded=False):
+    st.markdown(
+        '<p class="app-blurb">Not decoration — it\'s how you find patterns, outliers, and errors '
+        "before you ever trust a model.</p>",
+        unsafe_allow_html=True,
+    )
+    eda_daily = aggregate_daily(raw_df)
+
+    st.markdown("##### Line chart — AQI trend over time")
+    fig_line = px.line(eda_daily, x="timestamp", y="aqi", color="city")
+    fig_line.update_xaxes(type="date")
+    style_fig(fig_line, palette)
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    st.markdown("##### Histogram — distribution of PM2.5 readings")
+    fig_hist = px.histogram(raw_df, x="pm2_5", color="city", barmode="overlay", opacity=0.6, nbins=50)
+    style_fig(fig_hist, palette)
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+    st.markdown("##### Heatmap — which pollutants move together")
+    corr_cols = ["pm2_5", "pm10", "co", "no2", "so2", "aqi", "temp", "humidity", "pressure", "wind_speed", "precip"]
+    corr = raw_df[corr_cols].corr().round(2)
+    fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale=[palette["card"], palette["accent"]], zmin=-1, zmax=1)
+    style_fig(fig_heat, palette)
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    st.markdown("##### Box plot — spotting outliers & sensor errors")
+    fig_box = px.box(raw_df, x="city", y="aqi", color="city")
+    style_fig(fig_box, palette)
+    st.plotly_chart(fig_box, use_container_width=True)
