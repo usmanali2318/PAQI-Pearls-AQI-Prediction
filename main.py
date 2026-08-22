@@ -423,8 +423,8 @@ st.markdown(
 eda_daily = aggregate_daily(raw_df)
 
 st.markdown("##### AQI trend over time")
-fig_line = px.line(eda_daily, x="timestamp", y="aqi", color="city")
-fig_line.update_xaxes(type="date")
+eda_daily["date_pkt"] = pd.to_datetime(eda_daily["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
+fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city")
 style_fig(fig_line, palette)
 show_only_selected_city(fig_line, city_key)
 st.plotly_chart(fig_line, use_container_width=True)
@@ -458,7 +458,7 @@ compare_df = pd.DataFrame({
     "Predicted": preds_hist,
 })
 fig_compare = px.line(compare_df, x="date", y=["Actual", "Predicted"])
-fig_compare.data[0].line.color = palette["text"]
-fig_compare.data[1].line.color = palette["accent"]
+fig_compare.data[0].line.update(color=palette["accent"], width=2.5)
+fig_compare.data[1].line.update(color=palette["border"], width=2, dash="dash")
 style_fig(fig_compare, palette)
 st.plotly_chart(fig_compare, use_container_width=True)
