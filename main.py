@@ -159,6 +159,11 @@ def inject_theme(city_key, dark_mode):
 
     .app-blurb {{ opacity: 0.85; margin: 0 0 10px 0; font-size: 0.95rem; }}
 
+    html {{ scroll-behavior: smooth; }}
+    #eda-anchor {{ scroll-margin-top: 90px; display: block; }}
+    .jump-link {{ color: {p['accent']} !important; font-size: 0.85rem; text-decoration: none; }}
+    .jump-link:hover {{ text-decoration: underline; }}
+
     /* Theme the city dropdown (closed control + open menu) and shrink it a bit.
        BaseWeb nests several divs inside [data-baseweb="select"] and the exact
        depth of the one actually carrying the background varies, so reset
@@ -347,6 +352,7 @@ with c3:
     style_fig(fig24, palette)
     fig24.update_yaxes(range=[0, aqi_band_ceiling(last24["aqi"].max())])
     st.plotly_chart(fig24, use_container_width=True)
+    st.markdown('<a href="#eda-anchor" class="jump-link">More detailed analysis</a>', unsafe_allow_html=True)
 with c4:
     st.markdown("#### Current Conditions")
     st.metric("Temperature", f"{city_hourly['temp'].iloc[-1]:.1f} C")
@@ -398,34 +404,46 @@ fig_shap.update_layout(showlegend=False)
 style_fig(fig_shap, palette)
 st.plotly_chart(fig_shap, use_container_width=True)
 
-# --- Data Visualization & EDA ---
-with st.expander("📊 Data Visualization & EDA", expanded=False):
+def show_only_selected_city(fig, selected):
+    """Default each city trace to hidden except the one currently selected in the
+    main dropdown; clicking a city in the legend still adds it back for comparison,
+    since Plotly's "legendonly" visibility keeps the entry clickable rather than
+    removing it."""
+    for trace in fig.data:
+        trace.visible = True if trace.name == selected else "legendonly"
+    return fig
+
+st.markdown('<div id="eda-anchor"></div>', unsafe_allow_html=True)
+with st.expander("Data Visualization and EDA", expanded=False):
     st.markdown(
-        '<p class="app-blurb">Not decoration — it\'s how you find patterns, outliers, and errors '
-        "before you ever trust a model.</p>",
+        '<p class="app-blurb">Historical patterns behind the forecast above. '
+        f"Showing {city} by default; click a city name in any legend to add it for comparison.</p>",
         unsafe_allow_html=True,
     )
     eda_daily = aggregate_daily(raw_df)
 
-    st.markdown("##### Line chart — AQI trend over time")
+    st.markdown("##### AQI trend over time")
     fig_line = px.line(eda_daily, x="timestamp", y="aqi", color="city")
     fig_line.update_xaxes(type="date")
     style_fig(fig_line, palette)
+    show_only_selected_city(fig_line, city_key)
     st.plotly_chart(fig_line, use_container_width=True)
 
-    st.markdown("##### Histogram — distribution of PM2.5 readings")
+    st.markdown("##### PM2.5 distribution")
     fig_hist = px.histogram(raw_df, x="pm2_5", color="city", barmode="overlay", opacity=0.6, nbins=50)
     style_fig(fig_hist, palette)
+    show_only_selected_city(fig_hist, city_key)
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    st.markdown("##### Heatmap — which pollutants move together")
+    st.markdown("##### Pollutant correlation")
     corr_cols = ["pm2_5", "pm10", "co", "no2", "so2", "aqi", "temp", "humidity", "pressure", "wind_speed", "precip"]
-    corr = raw_df[corr_cols].corr().round(2)
+    corr = raw_df[raw_df["city"] == city_key][corr_cols].corr().round(2)
     fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale=[palette["card"], palette["accent"]], zmin=-1, zmax=1)
     style_fig(fig_heat, palette)
     st.plotly_chart(fig_heat, use_container_width=True)
 
-    st.markdown("##### Box plot — spotting outliers & sensor errors")
+    st.markdown("##### AQI spread and outliers by city")
     fig_box = px.box(raw_df, x="city", y="aqi", color="city")
     style_fig(fig_box, palette)
+    show_only_selected_city(fig_box, city_key)
     st.plotly_chart(fig_box, use_container_width=True)
