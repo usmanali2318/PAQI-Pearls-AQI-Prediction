@@ -1,4 +1,4 @@
-import os, joblib, numpy as np, pandas as pd
+import os, json, joblib, numpy as np, pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor, HistGradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
@@ -7,7 +7,6 @@ from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.base import clone
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
@@ -162,7 +161,7 @@ def train_eval(df):
     print(f"\nPersistence baseline: RMSE={p_rmse:.2f}  MAE={p_mae:.2f}  R2={p_r2:.3f}  CategoryAcc={p_cat:.1%}")
     print("(any model below this line isn't adding real value over a trivial guess)\n")
 
-    best_name, best_model, best_r2, best_preds = None, None, -np.inf, None
+    best_name, best_model, best_r2, best_preds, best_rmse, best_mae, best_cat = None, None, -np.inf, None, None, None, None
     for name, model in fitted.items():
         preds = np.expm1(model.predict(X_test))
         rmse = mean_squared_error(y_test, preds) ** 0.5
@@ -171,6 +170,7 @@ def train_eval(df):
         print(f"{name}: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}  CategoryAcc={cat_acc:.1%}")
         if r2 > best_r2:
             best_name, best_model, best_r2, best_preds = name, model, r2, preds
+            best_rmse, best_mae, best_cat = rmse, mae, cat_acc
 
     print(f"\nBest model: {best_name} (R2={best_r2:.3f})")
     print(f"Per-horizon breakdown for {best_name}:")
@@ -200,56 +200,72 @@ def train_eval(df):
             m.fit(X_train, y_train_log[f"target_{h}d"])
             quantile_models[(h, q)] = m
 
-    return best_name, best_model, quantile_models
+    day6_scores = {
+        "description": "Every 6th day across the full training pool (already excludes the last 90 days), scattered across all seasons.",
+        "n": int(test_mask.sum()),
+        "model": {"rmse": round(best_rmse, 2), "mae": round(best_mae, 2), "r2": round(best_r2, 3), "category_acc": round(best_cat, 3)},
+        "persistence": {"rmse": round(p_rmse, 2), "mae": round(p_mae, 2), "r2": round(p_r2, 3), "category_acc": round(p_cat, 3)},
+    }
+    return best_name, best_model, quantile_models, day6_scores
 
-def recent_holdout_check(df, best_model, holdout_days=90):
-    """Supplementary check, alongside (not instead of) the scattered day%6 split
-    above: refit the exact winning model architecture on everything except the
-    trailing `holdout_days`, then evaluate purely on that trailing window, which
-    the model never saw in any form during training. The day%6 split proves the
-    model generalizes across every season in the dataset; this proves it can
-    genuinely forecast forward past its training cutoff, which is a different
-    and equally necessary claim before trusting it in production."""
+def evaluate_holdout(df_holdout, best_model):
+    """Evaluates the actual model that gets deployed — not a separate refit clone.
+    This only gives a fair result because the caller excluded this window from the
+    training pool entirely before train_eval() ever ran, so the deployed model has
+    genuinely never seen these rows in any form. Returns both a scores dict and a
+    tidy per-row prediction table (city, date, actual, predicted per horizon), so
+    the live app can display real holdout results instead of the model's own
+    in-sample recall over recent days."""
     target_cols = [f"target_{h}d" for h in HORIZONS]
-    X, y = df.drop(columns=["timestamp", "city", "date"] + target_cols), df[target_cols]
-    y_log = np.log1p(y)
+    X, y = df_holdout.drop(columns=["timestamp", "city", "date"] + target_cols), df_holdout[target_cols]
 
-    cutoff = df["timestamp"].max() - holdout_days * 86400
-    train_mask = df["timestamp"] <= cutoff
-    X_train, X_test = X[train_mask], X[~train_mask]
-    y_train_log, y_test = y_log[train_mask], y[~train_mask]
+    if X.empty:
+        print("\nHoldout evaluation skipped: not enough data past the cutoff yet.")
+        return None, None
 
-    if X_test.empty:
-        print(f"\nRecent-holdout check skipped: not enough data past the {holdout_days}-day cutoff yet.")
-        return
+    preds = np.expm1(best_model.predict(X))
 
-    model = clone(best_model)
-    model.fit(X_train, y_train_log)
-    preds = np.expm1(model.predict(X_test))
+    persistence_preds = np.tile(df_holdout["aqi"].values.reshape(-1, 1), (1, len(HORIZONS)))
+    p_rmse = mean_squared_error(y, persistence_preds) ** 0.5
+    p_mae, p_r2 = mean_absolute_error(y, persistence_preds), r2_score(y, persistence_preds)
+    p_cat = category_accuracy(y.values, persistence_preds)
 
-    persistence_preds = np.tile(df.loc[~train_mask, "aqi"].values.reshape(-1, 1), (1, len(HORIZONS)))
-    p_rmse = mean_squared_error(y_test, persistence_preds) ** 0.5
-    p_mae, p_r2 = mean_absolute_error(y_test, persistence_preds), r2_score(y_test, persistence_preds)
-    p_cat = category_accuracy(y_test.values, persistence_preds)
+    rmse = mean_squared_error(y, preds) ** 0.5
+    mae, r2 = mean_absolute_error(y, preds), r2_score(y, preds)
+    cat_acc = category_accuracy(y.values, preds)
 
-    rmse = mean_squared_error(y_test, preds) ** 0.5
-    mae, r2 = mean_absolute_error(y_test, preds), r2_score(y_test, preds)
-    cat_acc = category_accuracy(y_test.values, preds)
-
-    print(f"\n=== Recent-holdout check: last {holdout_days} days, never seen in any form during this fit ===")
-    print(f"Train window ends: {pd.to_datetime(cutoff, unit='s').date()}  |  "
-          f"Test window: {pd.to_datetime(cutoff, unit='s').date()} -> {pd.to_datetime(df['timestamp'].max(), unit='s').date()}  "
-          f"(n={len(X_test)})")
+    start, end = pd.to_datetime(df_holdout["timestamp"].min(), unit="s").date(), pd.to_datetime(df_holdout["timestamp"].max(), unit="s").date()
+    print(f"\n=== Held-out last-90-day evaluation: {start} -> {end}, n={len(df_holdout)} ===")
     print(f"Persistence baseline: RMSE={p_rmse:.2f}  MAE={p_mae:.2f}  R2={p_r2:.3f}  CategoryAcc={p_cat:.1%}")
-    print(f"Model on holdout:     RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}  CategoryAcc={cat_acc:.1%}")
-    verdict = "PASS — beats persistence on genuinely unseen recent data." if rmse < p_rmse else \
-              "FAIL — does not beat persistence on the recent holdout. Investigate before trusting this model forward."
+    print(f"Deployed model:       RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}  CategoryAcc={cat_acc:.1%}")
+    verdict = "PASS - beats persistence on genuinely unseen recent data." if rmse < p_rmse else \
+              "FAIL - does not beat persistence on the recent holdout. Investigate before trusting this model forward."
     print(f"Verdict: {verdict}")
-    print(per_horizon_metrics(y_test, preds))
+    print(per_horizon_metrics(y, preds))
 
-def save_to_registry(project, model, name, quantile_models):
+    scores = {
+        "description": "Last 90 days, entirely excluded from training before this model was ever fit.",
+        "holdout_start": str(start), "holdout_end": str(end), "n": len(df_holdout),
+        "model": {"rmse": round(rmse, 2), "mae": round(mae, 2), "r2": round(r2, 3), "category_acc": round(cat_acc, 3)},
+        "persistence": {"rmse": round(p_rmse, 2), "mae": round(p_mae, 2), "r2": round(p_r2, 3), "category_acc": round(p_cat, 3)},
+    }
+    pred_rows = pd.DataFrame({
+        "city": df_holdout["city"].values,
+        "date": pd.to_datetime(df_holdout["timestamp"], unit="s").dt.strftime("%Y-%m-%d").values,
+        "actual": df_holdout["aqi"].values,
+        "predicted_1d": preds[:, 0], "predicted_2d": preds[:, 1], "predicted_3d": preds[:, 2],
+    })
+    return scores, pred_rows
+
+def save_to_registry(project, model, name, quantile_models, day6_scores, holdout_scores, holdout_preds):
     os.makedirs("model_dir", exist_ok=True)
     joblib.dump({"point_model": model, "quantile_models": quantile_models}, "model_dir/model.pkl")
+
+    with open("model_dir/eval_scores.json", "w") as f:
+        json.dump({"day6_split": day6_scores, "last_90_days": holdout_scores}, f, indent=2)
+    if holdout_preds is not None:
+        holdout_preds.to_csv("model_dir/holdout_predictions.csv", index=False)
+
     mr = project.get_model_registry()
     for old in mr.get_models("multi_city_aqi_daily_model"):
         try:
@@ -257,7 +273,10 @@ def save_to_registry(project, model, name, quantile_models):
         except Exception:
             pass
     m = mr.python.create_model(name="multi_city_aqi_daily_model",
-                                description=f"Best model: {name}, predicts log1p(daily AQI) at +1d/+2d/+3d for 5 cities - invert with expm1. Bundle contains point_model and quantile_models (q0.1/q0.9 per horizon).")
+                                description=f"Best model: {name}, predicts log1p(daily AQI) at +1d/+2d/+3d for 5 cities - invert with expm1. "
+                                            "Trained excluding the last 90 days entirely. Bundle contains point_model, quantile_models "
+                                            "(q0.1/q0.9 per horizon), eval_scores.json (day%6 split + true 90-day holdout), and "
+                                            "holdout_predictions.csv (per-city actual vs predicted for the last 90 days, never seen during training).")
     try:
         m.save("model_dir")
     except Exception as e:
@@ -310,7 +329,15 @@ if __name__ == "__main__":
     print(f"Aggregated to {len(df)} city-days")
     df = engineer(df)
     per_city_diagnostic(df)
-    best_name, best_model, quantile_models = train_eval(df)
-    recent_holdout_check(df, best_model)
-    save_to_registry(project, best_model, best_name, quantile_models)
+
+    holdout_days = 90
+    cutoff = df["timestamp"].max() - holdout_days * 86400
+    df_main = df[df["timestamp"] <= cutoff].reset_index(drop=True)
+    df_holdout = df[df["timestamp"] > cutoff].reset_index(drop=True)
+    print(f"\nExcluding the last {holdout_days} days from training entirely: "
+          f"{len(df_main)} rows to train/tune on, {len(df_holdout)} rows held out as a true unseen test.")
+
+    best_name, best_model, quantile_models, day6_scores = train_eval(df_main)
+    holdout_scores, holdout_preds = evaluate_holdout(df_holdout, best_model)
+    save_to_registry(project, best_model, best_name, quantile_models, day6_scores, holdout_scores, holdout_preds)
     print("Model saved to Hopsworks Model Registry.")

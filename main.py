@@ -221,7 +221,11 @@ def load_model():
     m = mr.get_model("multi_city_aqi_daily_model", version=1)
     path = m.download()
     bundle = joblib.load(f"{path}/model.pkl")
-    return bundle["point_model"], bundle["quantile_models"], project
+    try:
+        holdout_preds = pd.read_csv(f"{path}/holdout_predictions.csv")
+    except FileNotFoundError:
+        holdout_preds = None  # older model bundle, predates this file being saved
+    return bundle["point_model"], bundle["quantile_models"], project, holdout_preds
 
 @st.cache_data(ttl=3600)
 def load_recent_data(_project):
@@ -257,7 +261,7 @@ def build_live_features(daily):
     daily = pd.concat([daily, pd.get_dummies(daily["city"], prefix="city").astype(int)], axis=1)
     return daily.dropna(subset=["lag_7d", "rolling_mean_14d"]).reset_index(drop=True)
 
-point_model, quantile_models, project = load_model()
+point_model, quantile_models, project, holdout_preds = load_model()
 raw_df = load_recent_data(project)
 cities = sorted(raw_df["city"].unique())
 
@@ -449,16 +453,24 @@ show_only_selected_city(fig_box, city_key)
 st.plotly_chart(fig_box, use_container_width=True)
 
 st.markdown("##### Predicted vs actual, last 90 days (+1 day horizon)")
-hist = city_rows.tail(91).reset_index(drop=True)
-X_hist = hist[feature_cols].iloc[:-1]
-preds_hist = np.expm1(point_model.predict(X_hist))[:, 0]
-compare_df = pd.DataFrame({
-    "date": pd.to_datetime(hist["timestamp"].iloc[1:], unit="s"),
-    "Actual": hist["aqi"].iloc[1:].values,
-    "Predicted": preds_hist,
-})
-fig_compare = px.line(compare_df, x="date", y=["Actual", "Predicted"])
-fig_compare.data[0].line.update(color=palette["accent"], width=2.5)
-fig_compare.data[1].line.update(color=palette["border"], width=2, dash="dash")
-style_fig(fig_compare, palette)
-st.plotly_chart(fig_compare, use_container_width=True)
+if holdout_preds is not None:
+    city_holdout = holdout_preds[holdout_preds["city"] == city_key].copy()
+    city_holdout["date"] = pd.to_datetime(city_holdout["date"])
+    compare_df = city_holdout.rename(columns={"actual": "Actual", "predicted_1d": "Predicted"})
+    fig_compare = px.line(compare_df, x="date", y=["Actual", "Predicted"])
+    fig_compare.data[0].line.update(color=palette["accent"], width=2.5)
+    fig_compare.data[1].line.update(color=palette["border"], width=2, dash="dash")
+    style_fig(fig_compare, palette)
+    st.plotly_chart(fig_compare, use_container_width=True)
+    st.markdown(
+        '<p class="app-blurb">These are genuine holdout predictions: the deployed model was trained '
+        "excluding this 90-day window entirely, so this reflects real forecasting performance, not the "
+        "model recalling data it was trained on.</p>",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        '<p class="app-blurb">Holdout predictions aren\'t available for the currently deployed model. '
+        "Rerun training_pipeline.py to generate them.</p>",
+        unsafe_allow_html=True,
+    )
