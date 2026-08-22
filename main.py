@@ -414,36 +414,36 @@ def show_only_selected_city(fig, selected):
     return fig
 
 st.markdown('<div id="eda-anchor"></div>', unsafe_allow_html=True)
-with st.expander("Data Visualization and EDA", expanded=False):
-    st.markdown(
-        '<p class="app-blurb">Historical patterns behind the forecast above. '
-        f"Showing {city} by default; click a city name in any legend to add it for comparison.</p>",
-        unsafe_allow_html=True,
-    )
-    eda_daily = aggregate_daily(raw_df)
+st.markdown("##### Data Visualization and EDA")
+st.markdown(
+    '<p class="app-blurb">Historical patterns behind the forecast above. '
+    f"Showing {city} by default; click a city name in any legend to add it for comparison.</p>",
+    unsafe_allow_html=True,
+)
+eda_daily = aggregate_daily(raw_df)
 
-    st.markdown("##### AQI trend over time")
-    fig_line = px.line(eda_daily, x="timestamp", y="aqi", color="city")
-    fig_line.update_xaxes(type="date")
-    style_fig(fig_line, palette)
-    show_only_selected_city(fig_line, city_key)
-    st.plotly_chart(fig_line, use_container_width=True)
+st.markdown("##### AQI trend over time")
+fig_line = px.line(eda_daily, x="timestamp", y="aqi", color="city")
+fig_line.update_xaxes(type="date")
+style_fig(fig_line, palette)
+show_only_selected_city(fig_line, city_key)
+st.plotly_chart(fig_line, use_container_width=True)
 
-    st.markdown("##### PM2.5 distribution")
-    fig_hist = px.histogram(raw_df, x="pm2_5", color="city", barmode="overlay", opacity=0.6, nbins=50)
-    style_fig(fig_hist, palette)
-    show_only_selected_city(fig_hist, city_key)
-    st.plotly_chart(fig_hist, use_container_width=True)
+st.markdown("##### PM2.5 distribution")
+fig_hist = px.histogram(raw_df, x="pm2_5", color="city", barmode="overlay", opacity=0.6, nbins=50)
+style_fig(fig_hist, palette)
+show_only_selected_city(fig_hist, city_key)
+st.plotly_chart(fig_hist, use_container_width=True)
 
-    st.markdown("##### Pollutant correlation")
-    corr_cols = ["pm2_5", "pm10", "co", "no2", "so2", "aqi", "temp", "humidity", "pressure", "wind_speed", "precip"]
-    corr = raw_df[raw_df["city"] == city_key][corr_cols].corr().round(2)
-    fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale=[palette["card"], palette["accent"]], zmin=-1, zmax=1)
-    style_fig(fig_heat, palette)
-    st.plotly_chart(fig_heat, use_container_width=True)
+st.markdown("##### Pollutant correlation")
+corr_cols = ["pm2_5", "pm10", "co", "no2", "so2", "aqi", "temp", "humidity", "pressure", "wind_speed", "precip"]
+corr = raw_df[raw_df["city"] == city_key][corr_cols].corr().round(2)
+fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale=[palette["card"], palette["accent"]], zmin=-1, zmax=1)
+style_fig(fig_heat, palette)
+st.plotly_chart(fig_heat, use_container_width=True)
 
-    st.markdown("##### AQI spread and outliers by city")
-    fig_box = px.box(raw_df, x="city", y="aqi", color="city")
-    style_fig(fig_box, palette)
-    show_only_selected_city(fig_box, city_key)
-    st.plotly_chart(fig_box, use_container_width=True)
+st.markdown("##### AQI spread and outliers by city")
+fig_box = px.box(raw_df, x="city", y="aqi", color="city")
+style_fig(fig_box, palette)
+show_only_selected_city(fig_box, city_key)
+st.plotly_chart(fig_box, use_container_width=True)
