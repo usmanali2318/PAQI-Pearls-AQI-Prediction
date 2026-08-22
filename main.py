@@ -214,7 +214,7 @@ def inject_theme(city_key, dark_mode):
     """, unsafe_allow_html=True)
     return p
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)
 def load_model():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     mr = project.get_model_registry()
