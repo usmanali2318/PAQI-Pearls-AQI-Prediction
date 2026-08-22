@@ -22,6 +22,19 @@ LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9
 DROPDOWN_BG = "#7A8B7F"
 DROPDOWN_TEXT = "#E8FBFC"
 
+# Fixed per-city colors for every multi-city chart, so a given city is always the
+# same color everywhere instead of Plotly assigning colors by first-appearance
+# order per chart (which differs by dataframe, producing a different color for
+# the same city on every chart).
+CITY_COLORS = {
+    "karachi": "#0FB9B1",
+    "islamabad": "#3A7CA5",
+    "lahore": "#7A9D54",
+    "peshawar": "#C9A227",
+    "quetta": "#8E6C8A",
+}
+CITY_ORDER = sorted(CITY_COLORS)
+
 CATEGORIES = [(50, "Good", "#2ECC71"), (100, "Moderate", "#F1C40F"), (150, "Unhealthy for Sensitive Groups", "#E67E22"),
               (200, "Unhealthy", "#E74C3C"), (300, "Very Unhealthy", "#8E44AD"), (10_000, "Hazardous", "#7B241C")]
 
@@ -428,7 +441,7 @@ eda_daily = aggregate_daily(raw_df)
 
 st.markdown("##### AQI trend over time")
 eda_daily["date_pkt"] = pd.to_datetime(eda_daily["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
-fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city")
+fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city", color_discrete_map=CITY_COLORS, category_orders={"city": CITY_ORDER})
 style_fig(fig_line, palette)
 show_only_selected_city(fig_line, city_key)
 st.plotly_chart(fig_line, use_container_width=True)
