@@ -447,3 +447,18 @@ fig_box = px.box(raw_df, x="city", y="aqi", color="city")
 style_fig(fig_box, palette)
 show_only_selected_city(fig_box, city_key)
 st.plotly_chart(fig_box, use_container_width=True)
+
+st.markdown("##### Predicted vs actual, last 90 days (+1 day horizon)")
+hist = city_rows.tail(91).reset_index(drop=True)
+X_hist = hist[feature_cols].iloc[:-1]
+preds_hist = np.expm1(point_model.predict(X_hist))[:, 0]
+compare_df = pd.DataFrame({
+    "date": pd.to_datetime(hist["timestamp"].iloc[1:], unit="s"),
+    "Actual": hist["aqi"].iloc[1:].values,
+    "Predicted": preds_hist,
+})
+fig_compare = px.line(compare_df, x="date", y=["Actual", "Predicted"])
+fig_compare.data[0].line.color = palette["text"]
+fig_compare.data[1].line.color = palette["accent"]
+style_fig(fig_compare, palette)
+st.plotly_chart(fig_compare, use_container_width=True)
