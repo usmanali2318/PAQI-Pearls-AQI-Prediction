@@ -38,9 +38,7 @@ def fetch_pollution(lat, lon, start, end, retries=5):
     df = pd.DataFrame({"timestamp": pd.to_datetime(r["time"]).astype("int64") // 10**9})
     for p in POLLUTANTS:
         df[RENAME.get(p, p)] = r[p]
-    # Open-Meteo's air-quality endpoint pads past the requested end_date with
-    # forecast-model output regardless of what end_date says, so clip to real
-    # "now" here — otherwise forecast rows silently end up in training history.
+    # Open-Meteo pads past end_date with forecast data regardless of the param, so clip to real now
     now_ts = int(datetime.now(timezone.utc).timestamp())
     return df[df["timestamp"] <= now_ts].reset_index(drop=True)
 

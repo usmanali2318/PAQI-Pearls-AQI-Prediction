@@ -1,17 +1,3 @@
-model_dir/
-model_dir_hourly/
-catboost_info/
-__pycache__/
-*.pyc
-*.log
-.python-version
-karachi_7point_test.py
-karachi_grid_test.py
-karachi_1point_test.py
-karachi_aqi_only_test.py
-typical_peak_hours.py
-test_openmeteo_aqi.py
-training_pipeline_hourly.py
 # Python
 __pycache__/
 *.pyc

@@ -1,4 +1,4 @@
-import os, base64, joblib
+import os, base64, joblib, json
 import datetime as dt
 from zoneinfo import ZoneInfo
 import numpy as np, pandas as pd
@@ -14,18 +14,11 @@ st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
 DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
 LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
 
-# Fixed dropdown colors — must exactly match secondaryBackgroundColor/textColor in
-# .streamlit/config.toml. The dropdown's CLOSED control is colored by Streamlit's
-# native theme (config.toml), which we can't override with CSS regardless of light/
-# dark mode, so the OPEN menu list is force-matched to those same fixed values here
-# instead of following the page's palette, to avoid the two disagreeing.
+# must match secondaryBackgroundColor/textColor in .streamlit/config.toml
 DROPDOWN_BG = "#7A8B7F"
 DROPDOWN_TEXT = "#E8FBFC"
 
-# Fixed per-city colors, used identically across every EDA chart. Without this,
-# Plotly assigns colors by the order cities first appear in each chart's own
-# dataframe, which differs chart to chart, so the same city ends up a different
-# color on the line chart vs the histogram vs the box plot.
+# fixed so the same city gets the same color on every chart
 CITY_COLORS = {
     "islamabad": "#4C72B0",
     "karachi": "#C44E52",
@@ -62,16 +55,13 @@ def friendly_feature_name(col):
     return col.replace("_", " ").title()
 
 def aqi_band(value):
-    """First (cutoff, label, color) band whose cutoff covers `value`."""
     return next((band for band in CATEGORIES if value <= band[0]), CATEGORIES[-1])
 
 def aqi_category(value):
     return aqi_band(value)[1:]
 
 def aqi_band_ceiling(value):
-    """Category cutoff for `value`, so a y-axis anchored at [0, ceiling] reflects
-    its real position on the AQI scale instead of autoscaling tightly to the data
-    range (which makes a 2-point wobble look like a cliff)."""
+    # anchors the y-axis to the real AQI scale so small dips don't look like cliffs
     return aqi_band(value)[0]
 
 def hex_to_rgba(hex_color, alpha):
@@ -79,13 +69,8 @@ def hex_to_rgba(hex_color, alpha):
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
-LAST_KNOWN_RMSE = {1: 8.73, 2: 16.73, 3: 19.23}  # from most recent training_pipeline.py evaluation run
-
 def style_fig(fig, palette):
-    """Force every text element (title, legend, axis titles/ticks) to a theme-aware
-    color. Plotly text lives in SVG <text>/<tspan> nodes, which the page-level
-    `span`/`p` CSS rule never reaches, so this has to be set on the figure itself
-    or labels silently default to a color that can vanish in light mode."""
+    # plotly text is SVG, so the page's CSS never reaches it - set colors here instead
     grid = hex_to_rgba(palette["text"], 0.12)
     fig.update_layout(
         title=dict(text=""),
@@ -237,7 +222,12 @@ def load_model():
         holdout_preds = pd.read_csv(f"{path}/holdout_predictions.csv")
     except FileNotFoundError:
         holdout_preds = None  # older model bundle, predates this file being saved
-    return bundle["point_model"], bundle["quantile_models"], project, holdout_preds
+    try:
+        with open(f"{path}/eval_scores.json") as f:
+            eval_scores = json.load(f)
+    except FileNotFoundError:
+        eval_scores = None  # older model bundle, predates this file being saved
+    return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 @st.cache_data(ttl=3600)
 def load_recent_data(_project):
@@ -273,7 +263,7 @@ def build_live_features(daily):
     daily = pd.concat([daily, pd.get_dummies(daily["city"], prefix="city").astype(int)], axis=1)
     return daily.dropna(subset=["lag_7d", "rolling_mean_14d"]).reset_index(drop=True)
 
-point_model, quantile_models, project, holdout_preds = load_model()
+point_model, quantile_models, project, holdout_preds, eval_scores = load_model()
 raw_df = load_recent_data(project)
 cities = sorted(raw_df["city"].unique())
 
@@ -380,12 +370,14 @@ st.markdown("#### 3-Day Forecast")
 fcols = st.columns(len(HORIZONS))
 for i, h in enumerate(HORIZONS):
     label, color = aqi_category(preds[i])
+    rmse_h = eval_scores["day6_split"]["per_horizon"][str(h)]["rmse"] if eval_scores else None
+    rmse_line = f"Model RMSE: ± {rmse_h}" if rmse_h is not None else "Model RMSE: unavailable"
     with fcols[i]:
         st.markdown(f"""<div class="glass-card">
             <p>+{h} day{'s' if h > 1 else ''}</p>
             <span class="badge" style="background:{color}33; color:{color};">{label}</span>
             <h2 style="margin:10px 0;">{preds[i]:.1f}</h2>
-            <p style="opacity:0.8;">Model RMSE: ± {LAST_KNOWN_RMSE[h]}</p>
+            <p style="opacity:0.8;">{rmse_line}</p>
             </div>""", unsafe_allow_html=True)
 
 st.markdown("#### Predicted AQI Trend")
@@ -421,10 +413,7 @@ style_fig(fig_shap, palette)
 st.plotly_chart(fig_shap, use_container_width=True)
 
 def show_only_selected_city(fig, selected):
-    """Default each city trace to hidden except the one currently selected in the
-    main dropdown; clicking a city in the legend still adds it back for comparison,
-    since Plotly's "legendonly" visibility keeps the entry clickable rather than
-    removing it."""
+    # legendonly keeps other cities clickable to add back in for comparison
     for trace in fig.data:
         trace.visible = True if trace.name == selected else "legendonly"
     return fig

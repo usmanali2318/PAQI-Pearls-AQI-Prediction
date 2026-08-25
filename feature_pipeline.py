@@ -52,24 +52,46 @@ def fetch_pollution_now(lat, lon):
     return {"aqi": us_aqi(c["pm2_5"], c["pm10"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
             "co": c["co"], "no2": c["no2"], "so2": c["so2"], "o3": c["o3"]}
 
+def fetch_weather_now(lat, lon):
+    for attempt in range(3):
+        try:
+            r = requests.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={"latitude": lat, "longitude": lon,
+                        "current": "temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,precipitation"},
+                timeout=(20, 30),
+            )
+            r.raise_for_status()
+            c = r.json()["current"]
+            return {"temp": c["temperature_2m"], "humidity": c["relative_humidity_2m"],
+                    "pressure": c["surface_pressure"], "wind_speed": c["wind_speed_10m"],
+                    "wind_deg": c["wind_direction_10m"], "precip": c["precipitation"]}
+        except requests.RequestException:
+            if attempt < 2:
+                time.sleep(5)
+
+    wx = requests.get("https://api.openweathermap.org/data/2.5/weather",
+                       params={"lat": lat, "lon": lon, "appid": OWM_KEY, "units": "metric"}, timeout=30).json()
+    return {"temp": wx["main"]["temp"], "humidity": wx["main"]["humidity"], "pressure": wx["main"]["pressure"],
+            "wind_speed": wx["wind"]["speed"], "wind_deg": wx["wind"].get("deg", 0),
+            "precip": wx.get("rain", {}).get("1h", 0.0)}
+
 def fetch_city_row(city, points):
     names = list(points.keys())
     primary_lat, primary_lon = points[names[0]]
 
     pollution = fetch_pollution_now(primary_lat, primary_lon)
-    wx = requests.get("https://api.openweathermap.org/data/2.5/weather",
-                       params={"lat": primary_lat, "lon": primary_lon, "appid": OWM_KEY, "units": "metric"}).json()
+    weather = fetch_weather_now(primary_lat, primary_lon)
 
     dist_vals = [fetch_pollution_now(*points[name])["aqi"] for name in names]
 
-    wind_deg = wx["wind"].get("deg", 0)
-    wind_dir_rad = np.radians(wind_deg)
+    wind_dir_rad = np.radians(weather["wind_deg"])
     ts = datetime.now(timezone.utc)
     row = {
         "timestamp": int(ts.timestamp()), "city": city,
         **pollution,
-        "temp": wx["main"]["temp"], "humidity": wx["main"]["humidity"], "pressure": wx["main"]["pressure"],
-        "wind_speed": wx["wind"]["speed"], "precip": wx.get("rain", {}).get("1h", 0.0),
+        "temp": weather["temp"], "humidity": weather["humidity"], "pressure": weather["pressure"],
+        "wind_speed": weather["wind_speed"], "precip": weather["precip"],
         "wind_dir_sin": np.sin(wind_dir_rad), "wind_dir_cos": np.cos(wind_dir_rad),
         **{f"district_{i+1}": v for i, v in enumerate(dist_vals)},
         "city_aqi_mean": sum(dist_vals) / len(dist_vals), "city_aqi_max": max(dist_vals), "city_aqi_min": min(dist_vals),

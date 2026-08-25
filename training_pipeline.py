@@ -44,6 +44,15 @@ def per_horizon_metrics(y_test, preds):
         lines.append(f"  +{h}d: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}")
     return "\n".join(lines)
 
+def per_horizon_scores(y_test, preds):
+    out = {}
+    for i, h in enumerate(HORIZONS):
+        rmse = mean_squared_error(y_test.iloc[:, i], preds[:, i]) ** 0.5
+        mae = mean_absolute_error(y_test.iloc[:, i], preds[:, i])
+        r2 = r2_score(y_test.iloc[:, i], preds[:, i])
+        out[str(h)] = {"rmse": round(rmse, 2), "mae": round(mae, 2), "r2": round(r2, 3)}
+    return out
+
 def clean_hourly_outliers(df):
     df = df[(df["pm2_5"] >= 0) & (df["pm10"] >= 0)].copy()
     aqi_cap = df.groupby("city")["aqi"].transform(lambda s: s.quantile(0.95))
@@ -205,17 +214,13 @@ def train_eval(df):
         "n": int(test_mask.sum()),
         "model": {"rmse": round(best_rmse, 2), "mae": round(best_mae, 2), "r2": round(best_r2, 3), "category_acc": round(best_cat, 3)},
         "persistence": {"rmse": round(p_rmse, 2), "mae": round(p_mae, 2), "r2": round(p_r2, 3), "category_acc": round(p_cat, 3)},
+        "per_horizon": per_horizon_scores(y_test, best_preds),
     }
     return best_name, best_model, quantile_models, day6_scores
 
 def evaluate_holdout(df_holdout, best_model):
-    """Evaluates the actual model that gets deployed — not a separate refit clone.
-    This only gives a fair result because the caller excluded this window from the
-    training pool entirely before train_eval() ever ran, so the deployed model has
-    genuinely never seen these rows in any form. Returns both a scores dict and a
-    tidy per-row prediction table (city, date, actual, predicted per horizon), so
-    the live app can display real holdout results instead of the model's own
-    in-sample recall over recent days."""
+    """Scores the deployed model on data it never trained on (caller excludes this
+    window before train_eval runs). Returns a scores dict + per-row predictions."""
     target_cols = [f"target_{h}d" for h in HORIZONS]
     X, y = df_holdout.drop(columns=["timestamp", "city", "date"] + target_cols), df_holdout[target_cols]
 
@@ -248,6 +253,7 @@ def evaluate_holdout(df_holdout, best_model):
         "holdout_start": str(start), "holdout_end": str(end), "n": len(df_holdout),
         "model": {"rmse": round(rmse, 2), "mae": round(mae, 2), "r2": round(r2, 3), "category_acc": round(cat_acc, 3)},
         "persistence": {"rmse": round(p_rmse, 2), "mae": round(p_mae, 2), "r2": round(p_r2, 3), "category_acc": round(p_cat, 3)},
+        "per_horizon": per_horizon_scores(y, preds),
     }
     pred_rows = pd.DataFrame({
         "city": df_holdout["city"].values,
