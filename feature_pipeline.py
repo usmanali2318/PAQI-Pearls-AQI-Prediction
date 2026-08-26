@@ -78,7 +78,14 @@ def fetch_city_row(city, points):
     return row
 
 def fetch_features() -> pd.DataFrame:
-    rows = [fetch_city_row(city, points) for city, points in CITIES.items()]
+    rows = []
+    for city, points in CITIES.items():
+        try:
+            rows.append(fetch_city_row(city, points))
+        except RuntimeError as e:
+            print(f"Skipping {city} this run: {e}")
+    if not rows:
+        raise RuntimeError("Every city failed this run - Open-Meteo is likely down, not just one point.")
     df = pd.DataFrame(rows)
     dist_cols = [f"district_{i+1}" for i in range(5)]
     float_cols = ["aqi", "co", "no2", "o3", "so2", "pm2_5", "pm10", "temp", "humidity", "pressure",
