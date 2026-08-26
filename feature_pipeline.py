@@ -2,8 +2,6 @@ import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timezone
 import hopsworks
 
-OWM_KEY = os.environ["OPENWEATHER_API_KEY"]
-
 CITIES = {
     "karachi": {"south": (24.8608, 67.0104), "keamari": (24.8944, 66.9874), "korangi": (24.8504, 67.1999),
                 "malir": (24.8929, 67.1953), "central": (24.9002, 67.0446)},
@@ -16,17 +14,6 @@ CITIES = {
     "quetta": {"saddar": (30.1798, 66.9750), "satellite_town": (30.1812, 67.0331), "sariab": (30.1300, 66.9800),
                "pashtunabad": (30.1900, 66.9500), "samungli": (30.2500, 66.9400)},
 }
-
-PM25_BP = [(0,12,0,50),(12.1,35.4,51,100),(35.5,55.4,101,150),(55.5,150.4,151,200),(150.5,250.4,201,300),(250.5,350.4,301,400),(350.5,500.4,401,500)]
-PM10_BP = [(0,54,0,50),(55,154,51,100),(155,254,101,150),(255,354,151,200),(355,424,201,300),(425,504,301,400),(505,604,401,500)]
-
-def us_aqi(pm25, pm10):
-    def sub(c, bp):
-        for lo, hi, ilo, ihi in bp:
-            if lo <= c <= hi:
-                return (ihi-ilo)/(hi-lo)*(c-lo)+ilo
-        return bp[-1][3]
-    return round(max(sub(pm25, PM25_BP), sub(pm10, PM10_BP)))
 
 def fetch_pollution_now(lat, lon):
     for attempt in range(3):
@@ -45,12 +32,7 @@ def fetch_pollution_now(lat, lon):
         except requests.RequestException:
             if attempt < 2:
                 time.sleep(5)
-
-    r = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
-                      params={"lat": lat, "lon": lon, "appid": OWM_KEY}, timeout=30).json()["list"][0]
-    c = r["components"]
-    return {"aqi": us_aqi(c["pm2_5"], c["pm10"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
-            "co": c["co"], "no2": c["no2"], "so2": c["so2"], "o3": c["o3"]}
+    raise RuntimeError(f"Open-Meteo air-quality fetch failed after 3 attempts for ({lat}, {lon})")
 
 def fetch_weather_now(lat, lon):
     for attempt in range(3):
@@ -69,12 +51,7 @@ def fetch_weather_now(lat, lon):
         except requests.RequestException:
             if attempt < 2:
                 time.sleep(5)
-
-    wx = requests.get("https://api.openweathermap.org/data/2.5/weather",
-                       params={"lat": lat, "lon": lon, "appid": OWM_KEY, "units": "metric"}, timeout=30).json()
-    return {"temp": wx["main"]["temp"], "humidity": wx["main"]["humidity"], "pressure": wx["main"]["pressure"],
-            "wind_speed": wx["wind"]["speed"], "wind_deg": wx["wind"].get("deg", 0),
-            "precip": wx.get("rain", {}).get("1h", 0.0)}
+    raise RuntimeError(f"Open-Meteo forecast fetch failed after 3 attempts for ({lat}, {lon})")
 
 def fetch_city_row(city, points):
     names = list(points.keys())

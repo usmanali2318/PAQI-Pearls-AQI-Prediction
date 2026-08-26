@@ -1,4 +1,4 @@
-import os, base64, joblib, json
+import os, base64, joblib, json, tempfile
 import datetime as dt
 from zoneinfo import ZoneInfo
 import numpy as np, pandas as pd
@@ -216,7 +216,7 @@ def load_model():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     mr = project.get_model_registry()
     m = mr.get_model("multi_city_aqi_daily_model", version=1)
-    path = m.download()
+    path = m.download(local_path=tempfile.mkdtemp())
     bundle = joblib.load(f"{path}/model.pkl")
     try:
         holdout_preds = pd.read_csv(f"{path}/holdout_predictions.csv")
@@ -370,7 +370,7 @@ st.markdown("#### 3-Day Forecast")
 fcols = st.columns(len(HORIZONS))
 for i, h in enumerate(HORIZONS):
     label, color = aqi_category(preds[i])
-    rmse_h = eval_scores["day6_split"]["per_horizon"][str(h)]["rmse"] if eval_scores else None
+    rmse_h = eval_scores.get("day6_split", {}).get("per_horizon", {}).get(str(h), {}).get("rmse") if eval_scores else None
     rmse_line = f"Model RMSE: ± {rmse_h}" if rmse_h is not None else "Model RMSE: unavailable"
     with fcols[i]:
         st.markdown(f"""<div class="glass-card">
