@@ -2,6 +2,23 @@ import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timezone
 import hopsworks
 
+OWM_KEY = os.environ["OPENWEATHER_API_KEY"]
+
+# PM-only, used ONLY when Open-Meteo fails - an approximation of Open-Meteo's
+# full 6-pollutant EPA methodology. Fine for Pakistani cities since PM2.5 is
+# almost always the controlling pollutant here anyway. Every row this touches
+# is tagged with source="openweather-fallback" so it stays auditable.
+PM25_BP = [(0,12,0,50),(12.1,35.4,51,100),(35.5,55.4,101,150),(55.5,150.4,151,200),(150.5,250.4,201,300),(250.5,350.4,301,400),(350.5,500.4,401,500)]
+PM10_BP = [(0,54,0,50),(55,154,51,100),(155,254,101,150),(255,354,151,200),(355,424,201,300),(425,504,301,400),(505,604,401,500)]
+
+def us_aqi_pm_fallback(pm25, pm10):
+    def sub(c, bp):
+        for lo, hi, ilo, ihi in bp:
+            if lo <= c <= hi:
+                return (ihi-ilo)/(hi-lo)*(c-lo)+ilo
+        return bp[-1][3]
+    return round(max(sub(pm25, PM25_BP), sub(pm10, PM10_BP)))
+
 CITIES = {
     "karachi": {"south": (24.8608, 67.0104), "keamari": (24.8944, 66.9874), "korangi": (24.8504, 67.1999),
                 "malir": (24.8929, 67.1953), "central": (24.9002, 67.0446)},
@@ -28,11 +45,16 @@ def fetch_pollution_now(lat, lon):
             c = r.json()["current"]
             return {"aqi": round(c["us_aqi"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
                     "co": c["carbon_monoxide"], "no2": c["nitrogen_dioxide"],
-                    "so2": c["sulphur_dioxide"], "o3": c["ozone"]}
+                    "so2": c["sulphur_dioxide"], "o3": c["ozone"], "source": "open-meteo"}
         except requests.RequestException:
             if attempt < 2:
                 time.sleep(5)
-    raise RuntimeError(f"Open-Meteo air-quality fetch failed after 3 attempts for ({lat}, {lon})")
+
+    r = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
+                      params={"lat": lat, "lon": lon, "appid": OWM_KEY}, timeout=30).json()["list"][0]
+    c = r["components"]
+    return {"aqi": us_aqi_pm_fallback(c["pm2_5"], c["pm10"]), "pm2_5": c["pm2_5"], "pm10": c["pm10"],
+            "co": c["co"], "no2": c["no2"], "so2": c["so2"], "o3": c["o3"], "source": "openweather-fallback"}
 
 def fetch_weather_now(lat, lon):
     for attempt in range(3):
@@ -47,11 +69,16 @@ def fetch_weather_now(lat, lon):
             c = r.json()["current"]
             return {"temp": c["temperature_2m"], "humidity": c["relative_humidity_2m"],
                     "pressure": c["surface_pressure"], "wind_speed": c["wind_speed_10m"],
-                    "wind_deg": c["wind_direction_10m"], "precip": c["precipitation"]}
+                    "wind_deg": c["wind_direction_10m"], "precip": c["precipitation"], "source": "open-meteo"}
         except requests.RequestException:
             if attempt < 2:
                 time.sleep(5)
-    raise RuntimeError(f"Open-Meteo forecast fetch failed after 3 attempts for ({lat}, {lon})")
+
+    wx = requests.get("https://api.openweathermap.org/data/2.5/weather",
+                       params={"lat": lat, "lon": lon, "appid": OWM_KEY, "units": "metric"}, timeout=30).json()
+    return {"temp": wx["main"]["temp"], "humidity": wx["main"]["humidity"], "pressure": wx["main"]["pressure"],
+            "wind_speed": wx["wind"]["speed"], "wind_deg": wx["wind"].get("deg", 0),
+            "precip": wx.get("rain", {}).get("1h", 0.0), "source": "openweather-fallback"}
 
 def fetch_city_row(city, points):
     names = list(points.keys())
@@ -60,7 +87,11 @@ def fetch_city_row(city, points):
     pollution = fetch_pollution_now(primary_lat, primary_lon)
     weather = fetch_weather_now(primary_lat, primary_lon)
 
-    dist_vals = [fetch_pollution_now(*points[name])["aqi"] for name in names]
+    dist_results = [fetch_pollution_now(*points[name]) for name in names]
+    dist_vals = [d["aqi"] for d in dist_results]
+
+    used_fallback = any(r["source"] == "openweather-fallback" for r in [pollution, weather] + dist_results)
+    pollution = {k: v for k, v in pollution.items() if k != "source"}
 
     wind_dir_rad = np.radians(weather["wind_deg"])
     ts = datetime.now(timezone.utc)
@@ -74,6 +105,7 @@ def fetch_city_row(city, points):
         "city_aqi_mean": sum(dist_vals) / len(dist_vals), "city_aqi_max": max(dist_vals), "city_aqi_min": min(dist_vals),
         "city_aqi_spread": max(dist_vals) - min(dist_vals),
         "hour": ts.hour, "day": ts.day, "month": ts.month, "day_of_week": ts.weekday(),
+        "used_fallback": used_fallback,
     }
     return row
 
@@ -82,10 +114,10 @@ def fetch_features() -> pd.DataFrame:
     for city, points in CITIES.items():
         try:
             rows.append(fetch_city_row(city, points))
-        except RuntimeError as e:
+        except Exception as e:
             print(f"Skipping {city} this run: {e}")
     if not rows:
-        raise RuntimeError("Every city failed this run - Open-Meteo is likely down, not just one point.")
+        raise RuntimeError("Every city failed this run - both Open-Meteo and OpenWeather are unreachable.")
     df = pd.DataFrame(rows)
     dist_cols = [f"district_{i+1}" for i in range(5)]
     float_cols = ["aqi", "co", "no2", "o3", "so2", "pm2_5", "pm10", "temp", "humidity", "pressure",
@@ -101,7 +133,16 @@ def push_to_hopsworks(df: pd.DataFrame):
     fg = fs.get_or_create_feature_group(
         name="multi_city_aqi_features", version=1, primary_key=["timestamp", "city"], event_time="timestamp",
         description="Hourly AQI (Open-Meteo, official US AQI) + weather + 5-district features for 5 Pakistani cities")
-    fg.insert(df)
+    for attempt in range(3):
+        try:
+            fg.insert(df)
+            return
+        except Exception as e:
+            if attempt < 2:
+                print(f"Insert failed ({e}), retrying in 30s...")
+                time.sleep(30)
+            else:
+                raise
 
 if __name__ == "__main__":
     df = fetch_features()
