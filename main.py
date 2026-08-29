@@ -94,8 +94,16 @@ def inject_theme(city_key, dark_mode):
     st.markdown(f"""
     <style>
     .stApp {{
+        position: relative;
+    }}
+    .stApp::before {{
+        content: "";
+        position: fixed; inset: 0; z-index: -1;
         background-image: url("data:image/webp;base64,{b64}");
-        background-size: cover; background-position: center; background-attachment: fixed;
+        background-size: cover; background-position: center;
+    }}
+    @media (max-width: 640px) {{
+        .stApp::before {{ background-position: top center; }}
     }}
     header[data-testid="stHeader"] {{ background: transparent; display: none !important; }}
     #MainMenu {{ visibility: hidden; }}
