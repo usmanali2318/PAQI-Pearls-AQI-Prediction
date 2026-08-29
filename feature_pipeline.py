@@ -133,6 +133,10 @@ def push_to_hopsworks(df: pd.DataFrame):
     fg = fs.get_or_create_feature_group(
         name="multi_city_aqi_features", version=1, primary_key=["timestamp", "city"], event_time="timestamp",
         description="Hourly AQI (Open-Meteo, official US AQI) + weather + 5-district features for 5 Pakistani cities")
+    # used_fallback isn't in the existing schema yet (get_or_create only creates on
+    # first-ever run, it doesn't add columns to a feature group that already exists).
+    # Drop it before insert for now - still printed in logs above for auditability.
+    df = df.drop(columns=["used_fallback"], errors="ignore")
     for attempt in range(3):
         try:
             fg.insert(df)
