@@ -1,5 +1,6 @@
 import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 import hopsworks
 
 OWM_KEY = os.environ["OPENWEATHER_API_KEY"]
@@ -84,13 +85,17 @@ def fetch_city_row(city, points):
     names = list(points.keys())
     primary_lat, primary_lon = points[names[0]]
 
-    pollution = fetch_pollution_now(primary_lat, primary_lon)
-    weather = fetch_weather_now(primary_lat, primary_lon)
+    # districts include the primary point at index 0, so fetch it once and reuse
+    with ThreadPoolExecutor(max_workers=len(names) + 1) as ex:
+        weather_fut = ex.submit(fetch_weather_now, primary_lat, primary_lon)
+        dist_futs = [ex.submit(fetch_pollution_now, *points[name]) for name in names]
+        weather = weather_fut.result()
+        dist_results = [f.result() for f in dist_futs]
 
-    dist_results = [fetch_pollution_now(*points[name]) for name in names]
+    pollution = dist_results[0]
     dist_vals = [d["aqi"] for d in dist_results]
 
-    used_fallback = any(r["source"] == "openweather-fallback" for r in [pollution, weather] + dist_results)
+    used_fallback = any(r["source"] == "openweather-fallback" for r in [weather] + dist_results)
     pollution = {k: v for k, v in pollution.items() if k != "source"}
 
     wind_dir_rad = np.radians(weather["wind_deg"])
@@ -111,11 +116,13 @@ def fetch_city_row(city, points):
 
 def fetch_features() -> pd.DataFrame:
     rows = []
-    for city, points in CITIES.items():
-        try:
-            rows.append(fetch_city_row(city, points))
-        except Exception as e:
-            print(f"Skipping {city} this run: {e}")
+    with ThreadPoolExecutor(max_workers=len(CITIES)) as ex:
+        futs = {ex.submit(fetch_city_row, city, points): city for city, points in CITIES.items()}
+        for fut, city in futs.items():
+            try:
+                rows.append(fut.result())
+            except Exception as e:
+                print(f"Skipping {city} this run: {e}")
     if not rows:
         raise RuntimeError("Every city failed this run - both Open-Meteo and OpenWeather are unreachable.")
     df = pd.DataFrame(rows)
