@@ -229,7 +229,7 @@ def load_model():
         eval_scores = None  # older model bundle, predates this file being saved
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     return fg.read()
