@@ -2,8 +2,8 @@ name: Feature Pipeline
 
 on:
   schedule:
-    - cron: "17 * * * *"  # every hour
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+    - cron: "43 */6 * * *"  # dead-man's-switch backup only - cron-job.org drives the real hourly schedule via workflow_dispatch
+  workflow_dispatch:  # allows manual trigger, and is what cron-job.org calls
 
 jobs:
   run:
