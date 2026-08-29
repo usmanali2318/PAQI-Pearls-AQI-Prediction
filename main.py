@@ -9,7 +9,7 @@ import shap
 import hopsworks
 from training_pipeline import aggregate_daily, HORIZONS
 
-st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
+st.set_page_config(page_title="PAQI - Pearls AQI", layout="wide")
 
 DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
 LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
