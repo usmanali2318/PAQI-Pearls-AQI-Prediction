@@ -2,7 +2,7 @@ name: Feature Pipeline
 
 on:
   #schedule:
-    #- cron: "43 */6 * * *"  # dead-man's-switch backup only - cron-job.org drives the real hourly schedule via workflow_dispatch
+    #- cron: "0 * * * *"  only - cron-job.org drives the real hourly schedule via workflow_dispatch
   workflow_dispatch:  # allows manual trigger, and is what cron-job.org calls
 
 jobs:
