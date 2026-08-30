@@ -84,6 +84,7 @@ backfill.py               historical data backfill
 .github/workflows/       GitHub Actions schedules for the above
 .streamlit/config.toml   app theme
 assets/                  city background images
+report/                  project report (PDF)
 ```
 
 ## Known limitations
