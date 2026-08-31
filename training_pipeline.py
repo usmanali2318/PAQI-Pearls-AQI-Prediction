@@ -223,7 +223,7 @@ def train_eval(df):
         "persistence": {"rmse": round(p_rmse, 2), "mae": round(p_mae, 2), "r2": round(p_r2, 3), "category_acc": round(p_cat, 3)},
         "per_horizon": per_horizon_scores(y_test, best_preds),
     }
-    return best_name, best_model, quantile_models, day6_scores
+    return best_name, best_model, quantile_models, day6_scores, top_models
 
 def evaluate_holdout(df_holdout, best_model):
     """Scores the deployed model on data it never trained on (caller excludes this
@@ -270,12 +270,12 @@ def evaluate_holdout(df_holdout, best_model):
     })
     return scores, pred_rows
 
-def save_to_registry(project, model, name, quantile_models, day6_scores, holdout_scores, holdout_preds):
+def save_to_registry(project, model, name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models):
     os.makedirs("model_dir", exist_ok=True)
     joblib.dump({"point_model": model, "quantile_models": quantile_models}, "model_dir/model.pkl")
 
     with open("model_dir/eval_scores.json", "w") as f:
-        json.dump({"day6_split": day6_scores, "last_90_days": holdout_scores}, f, indent=2)
+        json.dump({"day6_split": day6_scores, "last_90_days": holdout_scores, "model_comparison": top_models}, f, indent=2)
     if holdout_preds is not None:
         holdout_preds.to_csv("model_dir/holdout_predictions.csv", index=False)
 
@@ -288,8 +288,9 @@ def save_to_registry(project, model, name, quantile_models, day6_scores, holdout
     m = mr.python.create_model(name="multi_city_aqi_daily_model",
                                 description=f"Best model: {name}, predicts log1p(daily AQI) at +1d/+2d/+3d for 5 cities - invert with expm1. "
                                             "Trained excluding the last 90 days entirely. Bundle contains point_model, quantile_models "
-                                            "(q0.1/q0.9 per horizon), eval_scores.json (day%6 split + true 90-day holdout), and "
-                                            "holdout_predictions.csv (per-city actual vs predicted for the last 90 days, never seen during training).")
+                                            "(q0.1/q0.9 per horizon), eval_scores.json (day%6 split + true 90-day holdout + top-3 model "
+                                            "comparison), and holdout_predictions.csv (per-city actual vs predicted for the last 90 days, "
+                                            "never seen during training).")
     try:
         m.save("model_dir")
     except Exception as e:
@@ -350,7 +351,7 @@ if __name__ == "__main__":
     print(f"\nExcluding the last {holdout_days} days from training entirely: "
           f"{len(df_main)} rows to train/tune on, {len(df_holdout)} rows held out as a true unseen test.")
 
-    best_name, best_model, quantile_models, day6_scores = train_eval(df_main)
+    best_name, best_model, quantile_models, day6_scores, top_models = train_eval(df_main)
     holdout_scores, holdout_preds = evaluate_holdout(df_holdout, best_model)
-    save_to_registry(project, best_model, best_name, quantile_models, day6_scores, holdout_scores, holdout_preds)
+    save_to_registry(project, best_model, best_name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models)
     print("Model saved to Hopsworks Model Registry.")

@@ -166,6 +166,9 @@ def inject_theme(city_key, dark_mode):
     #eda-anchor {{ scroll-margin-top: 90px; display: block; }}
     [id^="nav-"] {{ scroll-margin-top: 90px; }}
 
+    /* Side nav: labels always visible (dimmed), not hover-only, to match the
+       reference design. True "current section" highlighting needs scroll
+       position, which is JS-only - skipped per request to keep this CSS-only. */
     .side-nav {{
         position: fixed; right: 18px; top: 50%; transform: translateY(-50%); z-index: 900;
         display: flex; flex-direction: column; align-items: flex-end; gap: 0;
@@ -177,14 +180,14 @@ def inject_theme(city_key, dark_mode):
     .side-nav a::before {{
         content: ""; width: 9px; height: 9px; border-radius: 50%;
         background: {p['card']}; border: 2px solid {p['accent']}; flex-shrink: 0;
-        transition: background 0.15s ease;
+        transition: background 0.15s ease, border-color 0.15s ease;
     }}
     .side-nav a:hover::before {{ background: {p['accent']}; }}
     .side-nav a span {{
-        font-size: 0.75rem; color: {p['text']} !important; opacity: 0; white-space: nowrap;
-        transition: opacity 0.15s ease;
+        font-size: 0.75rem; color: {p['text']} !important; opacity: 0.55; white-space: nowrap;
+        transition: opacity 0.15s ease, font-weight 0.15s ease;
     }}
-    .side-nav a:hover span {{ opacity: 0.85; }}
+    .side-nav a:hover span {{ opacity: 1; font-weight: 600; }}
     .side-nav::before {{
         content: ""; position: absolute; right: 4px; top: 4px; bottom: 4px; width: 1px;
         background: {p['shade']}; z-index: -1;
@@ -261,7 +264,7 @@ def load_model():
         eval_scores = None  # older model bundle, predates this file being saved
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     return fg.read()
@@ -527,5 +530,43 @@ else:
     st.markdown(
         '<p class="app-blurb">Holdout predictions aren\'t available for the currently deployed model. '
         "Rerun training_pipeline.py to generate them.</p>",
+        unsafe_allow_html=True,
+    )
+
+# --- Model comparison: top 3 models from training, scores across all 3 horizons ---
+st.markdown('<div id="nav-models"></div>', unsafe_allow_html=True)
+st.markdown("##### Model Comparison")
+model_comparison = eval_scores.get("model_comparison") if eval_scores else None
+if model_comparison:
+    st.markdown(
+        '<p class="app-blurb">Top 3 models from training, evaluated on the same held-out split.</p>',
+        unsafe_allow_html=True,
+    )
+    mcols = st.columns(len(model_comparison))
+    for col, m in zip(mcols, model_comparison):
+        with col:
+            st.markdown(f"""<div class="glass-card">
+                <p style="opacity:0.8; margin-bottom:4px;">{m['name']}</p>
+                <h3 style="margin:0 0 10px 0;">R2 {m['r2']:.3f}</h3>
+                <p style="margin:0;">RMSE {m['rmse']} &nbsp;·&nbsp; MAE {m['mae']}</p>
+                </div>""", unsafe_allow_html=True)
+
+    comp_rows = [
+        {"Model": m["name"], "Day": f"+{day}d", "RMSE": s["rmse"], "MAE": s["mae"], "R2": s["r2"]}
+        for m in model_comparison for day, s in m["per_horizon"].items()
+    ]
+    comp_df = pd.DataFrame(comp_rows)
+    model_order = [m["name"] for m in model_comparison]
+    for metric in ["RMSE", "MAE", "R2"]:
+        fig_comp = px.bar(comp_df, x="Day", y=metric, color="Model", barmode="group",
+                           category_orders={"Model": model_order},
+                           color_discrete_sequence=[palette["accent"], palette["mid2"], palette["border"]])
+        fig_comp.update_layout(legend_title_text="")
+        style_fig(fig_comp, palette)
+        st.plotly_chart(fig_comp, use_container_width=True)
+else:
+    st.markdown(
+        '<p class="app-blurb">Model comparison data isn\'t available for the currently deployed model. '
+        "Rerun training_pipeline.py to generate it.</p>",
         unsafe_allow_html=True,
     )
