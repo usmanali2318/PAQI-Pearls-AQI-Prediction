@@ -171,15 +171,22 @@ def train_eval(df):
     print("(any model below this line isn't adding real value over a trivial guess)\n")
 
     best_name, best_model, best_r2, best_preds, best_rmse, best_mae, best_cat = None, None, -np.inf, None, None, None, None
+    all_model_scores = []
     for name, model in fitted.items():
         preds = np.expm1(model.predict(X_test))
         rmse = mean_squared_error(y_test, preds) ** 0.5
         mae, r2 = mean_absolute_error(y_test, preds), r2_score(y_test, preds)
         cat_acc = category_accuracy(y_test.values, preds)
         print(f"{name}: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}  CategoryAcc={cat_acc:.1%}")
+        all_model_scores.append({
+            "name": name, "rmse": round(rmse, 2), "mae": round(mae, 2), "r2": round(r2, 3),
+            "per_horizon": per_horizon_scores(y_test, preds),
+        })
         if r2 > best_r2:
             best_name, best_model, best_r2, best_preds = name, model, r2, preds
             best_rmse, best_mae, best_cat = rmse, mae, cat_acc
+
+    top_models = sorted(all_model_scores, key=lambda m: -m["r2"])[:3]
 
     print(f"\nBest model: {best_name} (R2={best_r2:.3f})")
     print(f"Per-horizon breakdown for {best_name}:")

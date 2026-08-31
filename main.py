@@ -164,6 +164,32 @@ def inject_theme(city_key, dark_mode):
 
     html {{ scroll-behavior: smooth; }}
     #eda-anchor {{ scroll-margin-top: 90px; display: block; }}
+    [id^="nav-"] {{ scroll-margin-top: 90px; }}
+
+    .side-nav {{
+        position: fixed; right: 18px; top: 50%; transform: translateY(-50%); z-index: 900;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 0;
+    }}
+    .side-nav a {{
+        display: flex; align-items: center; gap: 10px; text-decoration: none;
+        padding: 9px 0; position: relative;
+    }}
+    .side-nav a::before {{
+        content: ""; width: 9px; height: 9px; border-radius: 50%;
+        background: {p['card']}; border: 2px solid {p['accent']}; flex-shrink: 0;
+        transition: background 0.15s ease;
+    }}
+    .side-nav a:hover::before {{ background: {p['accent']}; }}
+    .side-nav a span {{
+        font-size: 0.75rem; color: {p['text']} !important; opacity: 0; white-space: nowrap;
+        transition: opacity 0.15s ease;
+    }}
+    .side-nav a:hover span {{ opacity: 0.85; }}
+    .side-nav::before {{
+        content: ""; position: absolute; right: 4px; top: 4px; bottom: 4px; width: 1px;
+        background: {p['shade']}; z-index: -1;
+    }}
+    @media (max-width: 900px) {{ .side-nav {{ display: none; }} }}
     .jump-link {{ color: {p['accent']} !important; font-size: 0.85rem; text-decoration: none; }}
     .jump-link:hover {{ text-decoration: underline; }}
 
@@ -289,6 +315,17 @@ with st.container(key="ribbon"):
         )
 dark_mode = st.session_state.dark_mode
 
+st.markdown("""
+<div class="side-nav">
+    <a href="#nav-home"><span>Home</span></a>
+    <a href="#nav-trend"><span>24h Trend</span></a>
+    <a href="#nav-forecast"><span>Forecast</span></a>
+    <a href="#nav-why"><span>Why This Prediction</span></a>
+    <a href="#eda-anchor"><span>EDA</span></a>
+    <a href="#nav-models"><span>Model Comparison</span></a>
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown(
     '<p class="app-blurb">Machine-learning powered 3-day air quality forecasts for major '
     "Pakistani cities, combining live pollutant readings with weather and seasonal patterns.</p>",
@@ -322,6 +359,7 @@ current_aqi = city_hourly["aqi"].iloc[-1]
 prev_aqi = city_hourly["aqi"].iloc[-2]
 cat_label, cat_color = aqi_category(current_aqi)
 
+st.markdown('<div id="nav-home"></div>', unsafe_allow_html=True)
 st.title(f"{city} Air Quality")
 
 # --- Current AQI gauge + category, merged into one card ---
@@ -356,6 +394,7 @@ for col, (label, key) in zip(pcols, pollutants):
 # --- 24h trend + current conditions ---
 c3, c4 = st.columns([2, 1])
 with c3:
+    st.markdown('<div id="nav-trend"></div>', unsafe_allow_html=True)
     st.markdown("#### 24-Hour AQI Trend")
     last24 = city_hourly.tail(24)
     x_pkt = pd.to_datetime(last24["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
@@ -375,6 +414,7 @@ with c4:
     st.metric("Pressure", f"{city_hourly['pressure'].iloc[-1]:.1f} hPa")
 
 # --- 3-day forecast cards ---
+st.markdown('<div id="nav-forecast"></div>', unsafe_allow_html=True)
 st.markdown("#### 3-Day Forecast")
 fcols = st.columns(len(HORIZONS))
 for i, h in enumerate(HORIZONS):
@@ -399,6 +439,7 @@ fig_trend.update_yaxes(range=[0, aqi_band_ceiling(trend_df["aqi"].max())])
 st.plotly_chart(fig_trend, use_container_width=True)
 
 # --- SHAP explainability ---
+st.markdown('<div id="nav-why"></div>', unsafe_allow_html=True)
 st.markdown("#### Why This Prediction")
 horizon_choice = st.radio("Horizon", HORIZONS, format_func=lambda h: f"+{h} day{'s' if h > 1 else ''}", horizontal=True)
 h_idx = HORIZONS.index(horizon_choice)
@@ -439,6 +480,8 @@ eda_daily = aggregate_daily(raw_df)
 st.markdown("##### AQI trend over time")
 eda_daily["date_pkt"] = pd.to_datetime(eda_daily["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
 fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city", color_discrete_map=CITY_COLORS)
+fig_line.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
+fig_line.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y"))
 style_fig(fig_line, palette)
 show_only_selected_city(fig_line, city_key)
 st.plotly_chart(fig_line, use_container_width=True)
@@ -470,6 +513,8 @@ if holdout_preds is not None:
     fig_compare = px.line(compare_df, x="date", y=["Actual", "Predicted"])
     fig_compare.data[0].line.update(color=palette["accent"], width=2.5)
     fig_compare.data[1].line.update(color=palette["border"], width=2, dash="dash")
+    fig_compare.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
+    fig_compare.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y"))
     style_fig(fig_compare, palette)
     st.plotly_chart(fig_compare, use_container_width=True)
     st.markdown(
