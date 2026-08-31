@@ -9,7 +9,7 @@ import shap
 import hopsworks
 from training_pipeline import aggregate_daily, HORIZONS
 
-st.set_page_config(page_title="PAQI - Pearls AQI", layout="wide")
+st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
 
 DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
 LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
@@ -79,6 +79,12 @@ def style_fig(fig, palette):
         font=dict(color=palette["text"]),
         title_font=dict(color=palette["text"]),
         legend=dict(font=dict(color=palette["text"])),
+        hoverlabel=dict(
+            bgcolor=hex_to_rgba(palette["card"], 0.95),
+            bordercolor=palette["accent"],
+            font=dict(color=palette["text"], family="Arial, sans-serif", size=13),
+            align="left",
+        ),
     )
     fig.update_xaxes(tickfont=dict(color=palette["text"]), title_font=dict(color=palette["text"]),
                       gridcolor=grid, zerolinecolor=grid, linecolor=grid)
@@ -229,7 +235,7 @@ def load_model():
         eval_scores = None  # older model bundle, predates this file being saved
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     return fg.read()
@@ -354,7 +360,10 @@ with c3:
     last24 = city_hourly.tail(24)
     x_pkt = pd.to_datetime(last24["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
     fig24 = px.area(last24, x=x_pkt, y="aqi")
-    fig24.update_traces(line_color=palette["accent"], fillcolor=hex_to_rgba(palette["accent"], 0.2))
+    fig24.update_traces(
+        line_color=palette["accent"], fillcolor=hex_to_rgba(palette["accent"], 0.2),
+        hovertemplate="%{x|%b %d, %Y \u00b7 %I:%M %p}<br><b>AQI %{y}</b><extra></extra>",
+    )
     style_fig(fig24, palette)
     fig24.update_yaxes(range=[0, aqi_band_ceiling(last24["aqi"].max())])
     st.plotly_chart(fig24, use_container_width=True)
