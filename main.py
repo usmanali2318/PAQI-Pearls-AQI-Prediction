@@ -69,6 +69,14 @@ def hex_to_rgba(hex_color, alpha):
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
+def add_markers(fig, palette, size=6):
+    # punches a visible dot at each data point, outlined in the card color so it
+    # reads as a marker sitting on the line rather than a bump - the "character"
+    # the plain lines were missing
+    fig.update_traces(mode="lines+markers", marker=dict(size=size, line=dict(width=1.5, color=palette["card"])),
+                       selector=dict(type="scatter"))
+    return fig
+
 def style_fig(fig, palette):
     # plotly text is SVG, so the page's CSS never reaches it - set colors here instead
     grid = hex_to_rgba(palette["text"], 0.12)
@@ -421,6 +429,7 @@ with c3:
         hovertemplate="%{x|%b %d, %Y \u00b7 %I:%M %p}<br><b>AQI %{y}</b><extra></extra>",
     )
     style_fig(fig24, palette)
+    add_markers(fig24, palette)
     fig24.update_yaxes(range=[0, aqi_band_ceiling(last24["aqi"].max())])
     st.plotly_chart(fig24, use_container_width=True)
     st.markdown('<a href="#eda-anchor" class="jump-link">More detailed analysis</a>', unsafe_allow_html=True)
@@ -452,6 +461,7 @@ trend_df = pd.DataFrame({"day": ["Today"] + [f"+{h}d" for h in HORIZONS],
 fig_trend = px.line(trend_df, x="day", y="aqi", markers=True)
 fig_trend.update_traces(line_color=palette["accent"])
 style_fig(fig_trend, palette)
+add_markers(fig_trend, palette, size=7)
 fig_trend.update_yaxes(range=[0, aqi_band_ceiling(trend_df["aqi"].max())])
 st.plotly_chart(fig_trend, use_container_width=True)
 
@@ -500,6 +510,7 @@ fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city", color_discret
 fig_line.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
 fig_line.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y"))
 style_fig(fig_line, palette)
+add_markers(fig_line, palette, size=4)
 show_only_selected_city(fig_line, city_key)
 st.plotly_chart(fig_line, use_container_width=True)
 
@@ -533,6 +544,7 @@ if holdout_preds is not None:
     fig_compare.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
     fig_compare.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y"))
     style_fig(fig_compare, palette)
+    add_markers(fig_compare, palette, size=5)
     st.plotly_chart(fig_compare, use_container_width=True)
     st.markdown(
         '<p class="app-blurb">These are genuine holdout predictions: the deployed model was trained '
@@ -574,37 +586,48 @@ if model_comparison:
     comp_df = comp_df.sort_values(["_day", "R2"], ascending=[True, False]).drop(columns="_day")
 
     header_bg = hex_to_rgba(palette["mid"] if dark_mode else palette["border"], 0.45)
-    best_bg = hex_to_rgba(palette["accent"], 0.16)
-    row_bg = hex_to_rgba(palette["card"], 0.5)
-    border = hex_to_rgba(palette["border"], 0.4)
+    best_bg = hex_to_rgba(palette["accent"], 0.14)
+    border = hex_to_rgba(palette["border"], 0.55)
+    shadow = "0 8px 20px rgba(0,0,0,0.35)" if dark_mode else "0 8px 20px rgba(40,69,57,0.18)"
 
-    rows_html = []
+    cols = "1.1fr 1.3fr 0.8fr 0.8fr 0.7fr"
+
+    def comp_row(cells, *, header=False, best=False):
+        bg = header_bg if header else (best_bg if best else "transparent")
+        weight = "700" if header else "600"
+        cell_html = "".join(
+            f'<span style="padding:11px 14px; text-align:{align}; font-weight:{weight};'
+            f' {"border-right:1px solid " + border + ";" if i < len(cells) - 1 else ""}">{val}</span>'
+            for i, (val, align) in enumerate(cells)
+        )
+        row_class = "comp-row-header" if header else "comp-row"
+        return f'<div class="{row_class}" style="background:{bg};">{cell_html}</div>'
+
+    rows_html = [comp_row(
+        [("Horizon", "left"), ("Model", "left"), ("MAE", "right"), ("RMSE", "right"), ("R2", "right")],
+        header=True,
+    )]
     prev_day = None
     for _, r in comp_df.iterrows():
         is_best = prev_day != r["Horizon"]
         prev_day = r["Horizon"]
-        bg = best_bg if is_best else row_bg
-        rows_html.append(
-            f'<tr style="background:{bg};">'
-            f'<td style="padding:10px 14px; font-weight:600;">{r["Horizon"]}</td>'
-            f'<td style="padding:10px 14px; font-weight:600;">{r["Model"]}</td>'
-            f'<td style="padding:10px 14px; text-align:right;">{r["MAE"]:.2f}</td>'
-            f'<td style="padding:10px 14px; text-align:right;">{r["RMSE"]:.2f}</td>'
-            f'<td style="padding:10px 14px; text-align:right;">{r["R2"]:.3f}</td>'
-            f'</tr>'
-        )
+        rows_html.append(comp_row([
+            (r["Horizon"], "left"), (r["Model"], "left"),
+            (f'{r["MAE"]:.2f}', "right"), (f'{r["RMSE"]:.2f}', "right"), (f'{r["R2"]:.3f}', "right"),
+        ], best=is_best))
+
     st.markdown("##### Full comparison table")
     st.markdown(f"""
-    <div class="glass-card" style="padding:0; overflow:hidden;">
-    <table style="width:100%; border-collapse:collapse; font-size:0.92rem; color:{palette['text']};">
-    <thead><tr style="background:{header_bg}; text-align:left;">
-        <th style="padding:10px 14px;">Horizon</th><th style="padding:10px 14px;">Model</th>
-        <th style="padding:10px 14px; text-align:right;">MAE</th>
-        <th style="padding:10px 14px; text-align:right;">RMSE</th>
-        <th style="padding:10px 14px; text-align:right;">R2</th>
-    </tr></thead>
-    <tbody style="border-top:1px solid {border};">{''.join(rows_html)}</tbody>
-    </table>
+    <style>
+    .comp-row, .comp-row-header {{
+        display: grid; grid-template-columns: {cols}; align-items: center;
+        border-bottom: 1px solid {border}; transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }}
+    .comp-row:hover {{ transform: translateY(-3px) scale(1.005); box-shadow: {shadow}; position: relative; z-index: 2; }}
+    .comp-row:last-child {{ border-bottom: none; }}
+    </style>
+    <div class="glass-card" style="padding:0; overflow:hidden; color:{palette['text']}; font-size:0.92rem;">
+        {''.join(rows_html)}
     </div>
     """, unsafe_allow_html=True)
 else:
