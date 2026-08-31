@@ -335,15 +335,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.markdown('<div id="nav-home"></div>', unsafe_allow_html=True)
 with st.container(key="city_row"):
-    sel_col, _, btn_col = st.columns([1, 2, 1], vertical_alignment="bottom")
+    title_col, sel_col, btn_col = st.columns([3, 1, 1], vertical_alignment="center")
     with sel_col:
-        city = st.selectbox("Select city", [c.title() for c in cities])
+        city = st.selectbox("Change city", [c.title() for c in cities])
     with btn_col:
         theme_label = "Dark theme" if not st.session_state.dark_mode else "Light theme"
         if st.button(theme_label, key="theme_btn"):
             st.session_state.dark_mode = not st.session_state.dark_mode
             st.rerun()
+    with title_col:
+        st.title(f"{city} Air Quality")
 city_key = city.lower()
 palette = inject_theme(city_key, dark_mode)
 
@@ -362,8 +365,6 @@ current_aqi = city_hourly["aqi"].iloc[-1]
 prev_aqi = city_hourly["aqi"].iloc[-2]
 cat_label, cat_color = aqi_category(current_aqi)
 
-st.markdown('<div id="nav-home"></div>', unsafe_allow_html=True)
-st.title(f"{city} Air Quality")
 
 # --- Current AQI gauge + category, merged into one card ---
 with st.container(key="current_aqi_card"):
