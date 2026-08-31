@@ -156,9 +156,10 @@ def inject_theme(city_key, dark_mode):
     .st-key-city_row [data-testid="stButton"] {{ display: flex; justify-content: flex-end; }}
     .st-key-city_row [data-testid="stButton"] button {{
         background: transparent !important; border: none !important; box-shadow: none !important;
-        color: {p['text']} !important; font-weight: 600; padding: 0 0 8px 0; white-space: nowrap; opacity: 0.85;
+        color: {p['text']} !important; font-weight: 600; padding: 0; white-space: nowrap; opacity: 0.85;
     }}
     .st-key-city_row [data-testid="stButton"] button:hover {{ text-decoration: underline; opacity: 1; }}
+    .city-label {{ margin: 0; white-space: nowrap; text-align: right; }}
 
     .app-blurb {{ opacity: 0.85; margin: 0 0 10px 0; font-size: 0.95rem; }}
 
@@ -337,9 +338,11 @@ st.markdown(
 
 st.markdown('<div id="nav-home"></div>', unsafe_allow_html=True)
 with st.container(key="city_row"):
-    title_col, sel_col, btn_col = st.columns([3, 1, 1], vertical_alignment="center")
+    title_col, label_col, sel_col, btn_col = st.columns([3, 0.8, 1.3, 1], vertical_alignment="center")
+    with label_col:
+        st.markdown('<p class="city-label">Change city</p>', unsafe_allow_html=True)
     with sel_col:
-        city = st.selectbox("Change city", [c.title() for c in cities])
+        city = st.selectbox("Change city", [c.title() for c in cities], label_visibility="collapsed")
     with btn_col:
         theme_label = "Dark theme" if not st.session_state.dark_mode else "Light theme"
         if st.button(theme_label, key="theme_btn"):
