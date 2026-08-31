@@ -174,7 +174,7 @@ def inject_theme(city_key, dark_mode):
         display: flex; flex-direction: column; align-items: flex-end; gap: 0;
     }}
     .side-nav a {{
-        display: flex; align-items: center; gap: 10px; text-decoration: none;
+        display: flex; flex-direction: row-reverse; align-items: center; gap: 10px; text-decoration: none;
         padding: 9px 0; position: relative;
     }}
     .side-nav a::before {{
