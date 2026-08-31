@@ -157,9 +157,19 @@ def inject_theme(city_key, dark_mode):
     .st-key-city_row [data-testid="stButton"] button {{
         background: transparent !important; border: none !important; box-shadow: none !important;
         color: {p['text']} !important; font-weight: 600; padding: 0; white-space: nowrap; opacity: 0.85;
+        font-size: 0.95rem !important;
     }}
     .st-key-city_row [data-testid="stButton"] button:hover {{ text-decoration: underline; opacity: 1; }}
-    .city-label {{ margin: 0; white-space: nowrap; text-align: right; }}
+    .city-label {{ margin: 0; white-space: nowrap; text-align: right; font-size: 0.95rem !important; }}
+
+    /* Everything in this row shares one flex baseline - strip each child's own
+       default margin/padding so vertical_alignment=center centers on text
+       height alone, not on Streamlit's default block spacing. */
+    .st-key-city_row {{ margin-top: 0.4rem; }}
+    .st-key-city_row h1 {{ margin: 0 !important; padding: 0 !important; line-height: 1.1 !important; }}
+    .st-key-city_row [data-testid="stMarkdownContainer"] {{ margin: 0; padding: 0; }}
+    .st-key-city_row [data-testid="stElementContainer"] {{ margin: 0 !important; }}
+    .st-key-city_row [data-testid="stWidgetLabel"] {{ display: none !important; }}
 
     .app-blurb {{ opacity: 0.85; margin: 0 0 10px 0; font-size: 0.95rem; }}
 
@@ -556,18 +566,47 @@ if model_comparison:
                 </div>""", unsafe_allow_html=True)
 
     comp_rows = [
-        {"Model": m["name"], "Day": f"+{day}d", "RMSE": s["rmse"], "MAE": s["mae"], "R2": s["r2"]}
+        {"Horizon": f"Day {day}", "Model": m["name"], "MAE": s["mae"], "RMSE": s["rmse"], "R2": s["r2"]}
         for m in model_comparison for day, s in m["per_horizon"].items()
     ]
     comp_df = pd.DataFrame(comp_rows)
-    model_order = [m["name"] for m in model_comparison]
-    for metric in ["RMSE", "MAE", "R2"]:
-        fig_comp = px.bar(comp_df, x="Day", y=metric, color="Model", barmode="group",
-                           category_orders={"Model": model_order},
-                           color_discrete_sequence=[palette["accent"], palette["mid2"], palette["border"]])
-        fig_comp.update_layout(legend_title_text="")
-        style_fig(fig_comp, palette)
-        st.plotly_chart(fig_comp, use_container_width=True)
+    comp_df["_day"] = comp_df["Horizon"].str.replace("Day ", "").astype(int)
+    comp_df = comp_df.sort_values(["_day", "R2"], ascending=[True, False]).drop(columns="_day")
+
+    header_bg = hex_to_rgba(palette["mid"] if dark_mode else palette["border"], 0.45)
+    best_bg = hex_to_rgba(palette["accent"], 0.16)
+    row_bg = hex_to_rgba(palette["card"], 0.5)
+    border = hex_to_rgba(palette["border"], 0.4)
+
+    rows_html = []
+    prev_day = None
+    for _, r in comp_df.iterrows():
+        is_best = prev_day != r["Horizon"]
+        prev_day = r["Horizon"]
+        bg = best_bg if is_best else row_bg
+        rows_html.append(
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:10px 14px; font-weight:600;">{r["Horizon"]}</td>'
+            f'<td style="padding:10px 14px; font-weight:600;">{r["Model"]}</td>'
+            f'<td style="padding:10px 14px; text-align:right;">{r["MAE"]:.2f}</td>'
+            f'<td style="padding:10px 14px; text-align:right;">{r["RMSE"]:.2f}</td>'
+            f'<td style="padding:10px 14px; text-align:right;">{r["R2"]:.3f}</td>'
+            f'</tr>'
+        )
+    st.markdown("##### Full comparison table")
+    st.markdown(f"""
+    <div class="glass-card" style="padding:0; overflow:hidden;">
+    <table style="width:100%; border-collapse:collapse; font-size:0.92rem; color:{palette['text']};">
+    <thead><tr style="background:{header_bg}; text-align:left;">
+        <th style="padding:10px 14px;">Horizon</th><th style="padding:10px 14px;">Model</th>
+        <th style="padding:10px 14px; text-align:right;">MAE</th>
+        <th style="padding:10px 14px; text-align:right;">RMSE</th>
+        <th style="padding:10px 14px; text-align:right;">R2</th>
+    </tr></thead>
+    <tbody style="border-top:1px solid {border};">{''.join(rows_html)}</tbody>
+    </table>
+    </div>
+    """, unsafe_allow_html=True)
 else:
     st.markdown(
         '<p class="app-blurb">Model comparison data isn\'t available for the currently deployed model. '
