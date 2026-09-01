@@ -132,6 +132,16 @@ def inject_theme(city_key, dark_mode):
         background: {p['card']}88; border: 1px solid {p['border']}88;
         border-radius: 14px; padding: 10px; backdrop-filter: blur(12px);
     }}
+    /* Hover lift for non-graph cards only - graph-bearing containers are
+       excluded further down so charts don't jump around on hover. */
+    .glass-card, [data-testid="stMetric"] {{
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }}
+    .glass-card:hover, [data-testid="stMetric"]:hover {{
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: {"0 8px 20px rgba(0,0,0,0.35)" if dark_mode else "0 8px 20px rgba(40,69,57,0.18)"};
+        position: relative; z-index: 2;
+    }}
     h1, h2, h3, h4, p, label, span:not(.badge) {{ color: {p['text']} !important; }}
     .badge {{ display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; font-size:0.85em; }}
 
@@ -585,7 +595,7 @@ if model_comparison:
     comp_df["_day"] = comp_df["Horizon"].str.replace("Day ", "").astype(int)
     comp_df = comp_df.sort_values(["_day", "R2"], ascending=[True, False]).drop(columns="_day")
 
-    header_bg = hex_to_rgba(palette["mid"] if dark_mode else palette["border"], 0.45)
+    header_bg = palette["mid"]
     best_bg = hex_to_rgba(palette["accent"], 0.14)
     border = hex_to_rgba(palette["border"], 0.55)
     shadow = "0 8px 20px rgba(0,0,0,0.35)" if dark_mode else "0 8px 20px rgba(40,69,57,0.18)"
@@ -595,8 +605,9 @@ if model_comparison:
     def comp_row(cells, *, header=False, best=False):
         bg = header_bg if header else (best_bg if best else "transparent")
         weight = "700" if header else "600"
+        color_rule = "color:#FFFFFF !important;" if header else ""
         cell_html = "".join(
-            f'<span style="padding:11px 14px; text-align:{align}; font-weight:{weight};'
+            f'<span style="padding:11px 14px; text-align:{align}; font-weight:{weight}; {color_rule}'
             f' {"border-right:1px solid " + border + ";" if i < len(cells) - 1 else ""}">{val}</span>'
             for i, (val, align) in enumerate(cells)
         )
@@ -625,8 +636,11 @@ if model_comparison:
     }}
     .comp-row:hover {{ transform: translateY(-3px) scale(1.005); box-shadow: {shadow}; position: relative; z-index: 2; }}
     .comp-row:last-child {{ border-bottom: none; }}
+    /* This card has its own per-row hover above - cancel the generic
+       glass-card hover so the whole table doesn't also lift at once. */
+    .comp-table-card:hover {{ transform: none !important; box-shadow: none !important; }}
     </style>
-    <div class="glass-card" style="padding:0; overflow:hidden; color:{palette['text']}; font-size:0.92rem;">
+    <div class="glass-card comp-table-card" style="padding:0; overflow:hidden; color:{palette['text']}; font-size:0.92rem;">
         {''.join(rows_html)}
     </div>
     """, unsafe_allow_html=True)
