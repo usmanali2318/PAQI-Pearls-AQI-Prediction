@@ -308,7 +308,7 @@ def load_recent_data(_project):
         # hopsworks version, so degrade to the last successful read instead
         # of crashing the whole app.
         if os.path.exists(DATA_CACHE_FILE):
-            st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data instead of live numbers.")
+            st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
             return pd.read_parquet(DATA_CACHE_FILE)
         raise
 
@@ -578,8 +578,7 @@ if holdout_preds is not None:
     st.plotly_chart(fig_compare, use_container_width=True)
     st.markdown(
         '<p class="app-blurb">These are genuine holdout predictions: the deployed model was trained '
-        "excluding this 90-day window entirely, so this reflects real forecasting performance, not the "
-        "model recalling data it was trained on.</p>",
+        "excluding this 90-day window entirely, reflecting forecasting performance.</p>",
         unsafe_allow_html=True,
     )
 else:
