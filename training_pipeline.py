@@ -28,10 +28,9 @@ def us_aqi(pm25, pm10):
 def load_data():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     fg = project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
-    try:
-        df = fg.read()
-    except Exception:
-        df = fg.read(read_options={"use_hive": True})  # Arrow Flight Query Service fallback
+    # Note: this hopsworks client version only reads via the Arrow Flight Query
+    # Service - there's no working Hive fallback to route around an outage there.
+    df = fg.read()
     return df.sort_values(["city", "timestamp"]).reset_index(drop=True), project
 
 def category_accuracy(y_true, y_pred):

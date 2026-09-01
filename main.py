@@ -293,15 +293,24 @@ def load_model():
         eval_scores = None  # older model bundle, predates this file being saved
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
-@st.cache_data(ttl=600)
+DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
+
+@st.cache_data(ttl=900)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     try:
-        return fg.read()
-    except Exception:
-        # Hopsworks' Arrow Flight Query Service occasionally errors out on the
-        # free tier; falling back to the Hive read path avoids it entirely.
-        return fg.read(read_options={"use_hive": True})
+        df = fg.read()
+        df.to_parquet(DATA_CACHE_FILE)
+        return df
+    except Exception as e:
+        # Hopsworks' Arrow Flight Query Service can drop connections outright
+        # (server-side outage) - there's no client-side bypass for it on this
+        # hopsworks version, so degrade to the last successful read instead
+        # of crashing the whole app.
+        if os.path.exists(DATA_CACHE_FILE):
+            st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data instead of live numbers.")
+            return pd.read_parquet(DATA_CACHE_FILE)
+        raise
 
 def build_live_features(daily):
     g = daily.groupby("city")
@@ -333,7 +342,13 @@ def build_live_features(daily):
     return daily.dropna(subset=["lag_7d", "rolling_mean_14d"]).reset_index(drop=True)
 
 point_model, quantile_models, project, holdout_preds, eval_scores = load_model()
-raw_df = load_recent_data(project)
+try:
+    with st.spinner("Loading latest AQI data..."):
+        raw_df = load_recent_data(project)
+except Exception:
+    st.error("Hopsworks' live data service is down and there's no cached data yet to fall back on. "
+             "This is an outage on Hopsworks' end, not this app - please try again shortly.")
+    st.stop()
 cities = sorted(raw_df["city"].unique())
 
 st.session_state.setdefault("dark_mode", False)
