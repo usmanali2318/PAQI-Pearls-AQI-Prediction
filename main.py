@@ -9,7 +9,7 @@ import shap
 import hopsworks
 from training_pipeline import aggregate_daily, HORIZONS
 
-st.set_page_config(page_title="Pakistan AQI Forecast", layout="wide")
+st.set_page_config(page_title="Pakistan AQI Forecast", page_icon="assets/favicon.png", layout="wide")
 
 DARK = {"accent": "#07F3F4", "mid": "#10BDC2", "mid2": "#14969C", "border": "#187A83", "card": "#17535D", "text": "#E8FBFC", "shade": "#187A83"}
 LIGHT = {"accent": "#284539", "mid": "#526A60", "mid2": "#6E8279", "border": "#9FB2A8", "card": "#ECF0EC", "text": "#284539", "shade": "#BCCCC3"}
@@ -296,7 +296,12 @@ def load_model():
 @st.cache_data(ttl=600)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
-    return fg.read()
+    try:
+        return fg.read()
+    except Exception:
+        # Hopsworks' Arrow Flight Query Service occasionally errors out on the
+        # free tier; falling back to the Hive read path avoids it entirely.
+        return fg.read(read_options={"use_hive": True})
 
 def build_live_features(daily):
     g = daily.groupby("city")

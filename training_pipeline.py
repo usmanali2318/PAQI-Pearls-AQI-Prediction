@@ -28,7 +28,11 @@ def us_aqi(pm25, pm10):
 def load_data():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     fg = project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
-    return fg.read().sort_values(["city", "timestamp"]).reset_index(drop=True), project
+    try:
+        df = fg.read()
+    except Exception:
+        df = fg.read(read_options={"use_hive": True})  # Arrow Flight Query Service fallback
+    return df.sort_values(["city", "timestamp"]).reset_index(drop=True), project
 
 def category_accuracy(y_true, y_pred):
     bins = [50, 100, 150, 200, 300]
