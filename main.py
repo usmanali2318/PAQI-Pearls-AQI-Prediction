@@ -295,9 +295,9 @@ def load_model():
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
-READ_TIMEOUT_S = 15
+READ_TIMEOUT_S = 45
 
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=1200)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     ex = ThreadPoolExecutor(max_workers=1)
