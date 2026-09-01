@@ -1,4 +1,5 @@
 import os, base64, joblib, json, tempfile
+from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 from zoneinfo import ZoneInfo
 import numpy as np, pandas as pd
@@ -294,19 +295,24 @@ def load_model():
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
+READ_TIMEOUT_S = 15
 
 @st.cache_data(ttl=900)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
+    ex = ThreadPoolExecutor(max_workers=1)
+    future = ex.submit(fg.read)
     try:
-        df = fg.read()
+        df = future.result(timeout=READ_TIMEOUT_S)
+        ex.shutdown(wait=False)
         df.to_parquet(DATA_CACHE_FILE)
         return df
-    except Exception as e:
-        # Hopsworks' Arrow Flight Query Service can drop connections outright
-        # (server-side outage) - there's no client-side bypass for it on this
-        # hopsworks version, so degrade to the last successful read instead
-        # of crashing the whole app.
+    except Exception:
+        # Covers both a real failure and our own timeout cutting off Hopsworks'
+        # multi-minute internal retry storm during a flaky connection window -
+        # either way, don't block the whole app on it. The background read
+        # thread is left to finish (or hang) on its own; its result is unused.
+        ex.shutdown(wait=False)
         if os.path.exists(DATA_CACHE_FILE):
             st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
             return pd.read_parquet(DATA_CACHE_FILE)
