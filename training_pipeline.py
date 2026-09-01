@@ -1,4 +1,4 @@
-import os, json, joblib, numpy as np, pandas as pd
+import os, time, json, joblib, numpy as np, pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor, HistGradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
@@ -30,7 +30,18 @@ def load_data():
     fg = project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     # Note: this hopsworks client version only reads via the Arrow Flight Query
     # Service - there's no working Hive fallback to route around an outage there.
-    df = fg.read()
+    # This is an unattended scheduled run, so retry a transient connection drop
+    # a couple times with backoff before giving up the whole run.
+    for attempt, wait in enumerate([0, 60, 180], start=1):
+        if wait:
+            print(f"Feature store read failed, retrying in {wait}s (attempt {attempt}/3)...")
+            time.sleep(wait)
+        try:
+            df = fg.read()
+            break
+        except Exception:
+            if attempt == 3:
+                raise
     return df.sort_values(["city", "timestamp"]).reset_index(drop=True), project
 
 def category_accuracy(y_true, y_pred):
