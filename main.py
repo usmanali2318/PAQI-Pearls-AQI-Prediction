@@ -295,7 +295,7 @@ def load_model():
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
-READ_TIMEOUT_S = 120
+READ_TIMEOUT_S = 300
 
 def _fetch_since(fg, since_ts):
     # Full read the first time; after that, only rows newer than what's already
