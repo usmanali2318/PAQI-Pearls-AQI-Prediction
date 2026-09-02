@@ -295,20 +295,13 @@ def load_model():
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
-READ_TIMEOUT_S = 300
+READ_TIMEOUT_S = 120
 
 def _fetch_since(fg, since_ts):
     # Full read the first time; after that, only rows newer than what's already
     # cached - cuts down how much this query scans/transfers against Hopsworks'
     # usage limits on every 20-min refresh.
-    query = fg if since_ts is None else fg.filter(fg.timestamp > since_ts)
-    try:
-        return query.read()
-    except Exception:
-        # Arrow Flight query service can be flaky/unprovisioned on newer
-        # projects (FlightUnavailableError: socket closed). Fall back to the
-        # older Hive/JDBC read path, which doesn't depend on Flight.
-        return query.read(read_options={"use_hive": True})
+    return fg.read() if since_ts is None else fg.filter(fg.timestamp > since_ts).read()
 
 @st.cache_data(ttl=1200)
 def load_recent_data(_project):
