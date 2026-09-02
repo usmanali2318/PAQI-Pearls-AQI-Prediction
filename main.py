@@ -295,16 +295,27 @@ def load_model():
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
-READ_TIMEOUT_S = 45
+READ_TIMEOUT_S = 120
+
+def _fetch_since(fg, since_ts):
+    # Full read the first time; after that, only rows newer than what's already
+    # cached - cuts down how much this query scans/transfers against Hopsworks'
+    # usage limits on every 20-min refresh.
+    return fg.read() if since_ts is None else fg.filter(fg.timestamp > since_ts).read()
 
 @st.cache_data(ttl=1200)
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
+    cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
+    since_ts = int(cached["timestamp"].max()) if cached is not None else None
+
     ex = ThreadPoolExecutor(max_workers=1)
-    future = ex.submit(fg.read)
+    future = ex.submit(_fetch_since, fg, since_ts)
     try:
-        df = future.result(timeout=READ_TIMEOUT_S)
+        new_rows = future.result(timeout=READ_TIMEOUT_S)
         ex.shutdown(wait=False)
+        df = new_rows if cached is None else pd.concat([cached, new_rows], ignore_index=True) \
+            .drop_duplicates(subset=["city", "timestamp"], keep="last")
         df.to_parquet(DATA_CACHE_FILE)
         return df
     except Exception:
@@ -313,9 +324,9 @@ def load_recent_data(_project):
         # either way, don't block the whole app on it. The background read
         # thread is left to finish (or hang) on its own; its result is unused.
         ex.shutdown(wait=False)
-        if os.path.exists(DATA_CACHE_FILE):
+        if cached is not None:
             st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
-            return pd.read_parquet(DATA_CACHE_FILE)
+            return cached
         raise
 
 def build_live_features(daily):
