@@ -22,19 +22,27 @@ RENAME = {"carbon_monoxide": "co", "nitrogen_dioxide": "no2", "sulphur_dioxide":
 
 def fetch_pollution(lat, lon, start, end, retries=5):
     for attempt in range(retries):
-        r = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality", params={
-            "latitude": lat, "longitude": lon, "start_date": start.strftime("%Y-%m-%d"),
-            "end_date": end.strftime("%Y-%m-%d"), "hourly": ",".join(POLLUTANTS)})
-        body = r.json()
+        try:
+            resp = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality", params={
+                "latitude": lat, "longitude": lon, "start_date": start.strftime("%Y-%m-%d"),
+                "end_date": end.strftime("%Y-%m-%d"), "hourly": ",".join(POLLUTANTS)}, timeout=30)
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                wait = 10 * (attempt + 1)
+                print(f"Request failed ({e}), retrying in {wait}s (attempt {attempt+1}/{retries})...")
+                time.sleep(wait)
+                continue
+            raise
+        body = resp.json()
         if "hourly" in body:
             time.sleep(2)
             r = body["hourly"]
             break
-        if r.status_code == 429 and attempt < retries - 1:
+        if resp.status_code == 429 and attempt < retries - 1:
             print(f"Rate limited, waiting 65s (attempt {attempt+1}/{retries})...")
             time.sleep(65)
             continue
-        raise RuntimeError(f"Open-Meteo error (status {r.status_code}): {body}")
+        raise RuntimeError(f"Open-Meteo error (status {resp.status_code}): {body}")
     df = pd.DataFrame({"timestamp": pd.to_datetime(r["time"]).astype("int64") // 10**9})
     for p in POLLUTANTS:
         df[RENAME.get(p, p)] = r[p]
@@ -42,12 +50,22 @@ def fetch_pollution(lat, lon, start, end, retries=5):
     now_ts = int(datetime.now(timezone.utc).timestamp())
     return df[df["timestamp"] <= now_ts].reset_index(drop=True)
 
-def fetch_weather_history(lat, lon, start, end):
-    r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
-        "latitude": lat, "longitude": lon, "start_date": start.strftime("%Y-%m-%d"),
-        "end_date": end.strftime("%Y-%m-%d"),
-        "hourly": "temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,precipitation",
-        "timezone": "UTC"}).json()["hourly"]
+def fetch_weather_history(lat, lon, start, end, retries=5):
+    for attempt in range(retries):
+        try:
+            r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
+                "latitude": lat, "longitude": lon, "start_date": start.strftime("%Y-%m-%d"),
+                "end_date": end.strftime("%Y-%m-%d"),
+                "hourly": "temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,precipitation",
+                "timezone": "UTC"}, timeout=30).json()["hourly"]
+            break
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                wait = 10 * (attempt + 1)
+                print(f"Weather request failed ({e}), retrying in {wait}s (attempt {attempt+1}/{retries})...")
+                time.sleep(wait)
+                continue
+            raise
     df = pd.DataFrame({
         "timestamp": pd.to_datetime(r["time"]).astype("int64") // 10**9,
         "temp": r["temperature_2m"], "humidity": r["relative_humidity_2m"],
