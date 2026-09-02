@@ -1,4 +1,4 @@
-import os, base64, joblib, json, tempfile
+import os, base64, joblib, json, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 from zoneinfo import ZoneInfo
@@ -296,12 +296,17 @@ def load_model():
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
 READ_TIMEOUT_S = 300
+FIRST_READ_DAYS = 95  # covers the 90-day chart plus a small buffer - no need to pull all 3 years cold
 
 def _fetch_since(fg, since_ts):
-    # Full read the first time; after that, only rows newer than what's already
-    # cached - cuts down how much this query scans/transfers against Hopsworks'
-    # usage limits on every 20-min refresh.
-    query = fg if since_ts is None else fg.filter(fg.timestamp > since_ts)
+    # Bounded read the first time (last FIRST_READ_DAYS) instead of the whole
+    # feature group - the UI never shows more than ~90 days anyway. After
+    # that, only rows newer than what's already cached - cuts down how much
+    # this query scans/transfers against Hopsworks' usage limits on every
+    # 20-min refresh.
+    if since_ts is None:
+        since_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
+    query = fg.filter(fg.timestamp > since_ts)
     try:
         return query.read()
     except Exception:
@@ -316,25 +321,32 @@ def load_recent_data(_project):
     cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
     since_ts = int(cached["timestamp"].max()) if cached is not None else None
 
-    ex = ThreadPoolExecutor(max_workers=1)
-    future = ex.submit(_fetch_since, fg, since_ts)
-    try:
-        new_rows = future.result(timeout=READ_TIMEOUT_S)
-        ex.shutdown(wait=False)
-        df = new_rows if cached is None else pd.concat([cached, new_rows], ignore_index=True) \
-            .drop_duplicates(subset=["city", "timestamp"], keep="last")
-        df.to_parquet(DATA_CACHE_FILE)
-        return df
-    except Exception:
-        # Covers both a real failure and our own timeout cutting off Hopsworks'
-        # multi-minute internal retry storm during a flaky connection window -
-        # either way, don't block the whole app on it. The background read
-        # thread is left to finish (or hang) on its own; its result is unused.
-        ex.shutdown(wait=False)
-        if cached is not None:
-            st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
-            return cached
-        raise
+    last_err = None
+    for attempt in range(3):
+        ex = ThreadPoolExecutor(max_workers=1)
+        future = ex.submit(_fetch_since, fg, since_ts)
+        try:
+            new_rows = future.result(timeout=READ_TIMEOUT_S)
+            ex.shutdown(wait=False)
+            df = new_rows if cached is None else pd.concat([cached, new_rows], ignore_index=True) \
+                .drop_duplicates(subset=["city", "timestamp"], keep="last")
+            df.to_parquet(DATA_CACHE_FILE)
+            return df
+        except Exception as e:
+            # Covers both a real failure and our own timeout cutting off Hopsworks'
+            # multi-minute internal retry storm during a flaky connection window.
+            # The background read thread is left to finish (or hang) on its own;
+            # its result is unused. Retry a couple more times with backoff before
+            # giving up and falling back to cached data.
+            ex.shutdown(wait=False)
+            last_err = e
+            if attempt < 2:
+                time.sleep(15 * (attempt + 1))
+                continue
+    if cached is not None:
+        st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
+        return cached
+    raise last_err
 
 def build_live_features(daily):
     g = daily.groupby("city")
