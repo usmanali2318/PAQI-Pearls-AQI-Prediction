@@ -4,6 +4,7 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 import numpy as np, pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import plotly.express as px
 import shap
@@ -133,15 +134,16 @@ def inject_theme(city_key, dark_mode):
         background: {p['card']}88; border: 1px solid {p['border']}88;
         border-radius: 14px; padding: 10px; backdrop-filter: blur(12px);
     }}
-    /* Hover lift for non-graph cards only - graph-bearing containers are
-       excluded further down so charts don't jump around on hover. */
-    .glass-card, [data-testid="stMetric"] {{
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }}
-    .glass-card:hover, [data-testid="stMetric"]:hover {{
-        transform: translateY(-3px) scale(1.01);
+    /* Constant depth for every card, graphs included - shadow is baseline,
+       not hover-triggered. Non-graph cards get a cursor-tilt on hover
+       (handled by the small JS block below); graph containers are left
+       static so charts don't jitter or feel interactive on hover. */
+    .glass-card, [data-testid="stMetric"], .plotly-chart-card,
+    [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{
         box-shadow: {"0 8px 20px rgba(0,0,0,0.35)" if dark_mode else "0 8px 20px rgba(40,69,57,0.18)"};
-        position: relative; z-index: 2;
+    }}
+    .glass-card, [data-testid="stMetric"] {{
+        transition: transform 0.15s ease;
     }}
     h1, h2, h3, h4, p, label, span:not(.badge) {{ color: {p['text']} !important; }}
     .badge {{ display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; font-size:0.85em; }}
@@ -274,6 +276,30 @@ def inject_theme(city_key, dark_mode):
     .aqi-category-block {{ display: flex; flex-direction: column; align-items: flex-start; }}
     </style>
     """, unsafe_allow_html=True)
+    # Cursor-position tilt for non-graph cards only. Runs in the component's
+    # iframe but reaches the real page via window.parent (same-origin), since
+    # st.markdown-injected <script> tags aren't executed by the browser.
+    components.html("""
+    <script>
+    const doc = window.parent.document;
+    function bindTilt() {
+        doc.querySelectorAll('.glass-card, [data-testid="stMetric"]').forEach(card => {
+            if (card.dataset.tiltBound) return;
+            card.dataset.tiltBound = "1";
+            card.style.transformStyle = "preserve-3d";
+            card.addEventListener('mousemove', e => {
+                const r = card.getBoundingClientRect();
+                const xRatio = (e.clientX - r.left) / r.width;  // 0 = left edge, 1 = right edge
+                const tilt = (0.5 - xRatio) * 14;  // left side -> positive tilt, right side -> negative
+                card.style.transform = `perspective(700px) rotateY(${tilt}deg)`;
+            });
+            card.addEventListener('mouseleave', () => { card.style.transform = "perspective(700px) rotateY(0deg)"; });
+        });
+    }
+    bindTilt();
+    new MutationObserver(bindTilt).observe(doc.body, {childList: true, subtree: true});
+    </script>
+    """, height=0)
     return p
 
 @st.cache_resource(ttl=3600)
@@ -523,22 +549,24 @@ with c4:
 # --- 3-day forecast cards ---
 st.markdown('<div id="nav-forecast"></div>', unsafe_allow_html=True)
 st.markdown("#### 3-Day Forecast")
+base_date = pd.to_datetime(int(latest["timestamp"].iloc[0]), unit="s").date()
 fcols = st.columns(len(HORIZONS))
 for i, h in enumerate(HORIZONS):
     label, color = aqi_category(preds[i])
     rmse_h = eval_scores.get("day6_split", {}).get("per_horizon", {}).get(str(h), {}).get("rmse") if eval_scores else None
     rmse_line = f"Model RMSE: ± {rmse_h}" if rmse_h is not None else "Model RMSE: unavailable"
+    forecast_date = (base_date + dt.timedelta(days=h)).strftime("%b %d")
     with fcols[i]:
         st.markdown(f"""<div class="glass-card">
-            <p>+{h} day{'s' if h > 1 else ''}</p>
+            <p>+{h} day{'s' if h > 1 else ''} &middot; {forecast_date}</p>
             <span class="badge" style="background:{color}33; color:{color};">{label}</span>
             <h2 style="margin:10px 0;">{preds[i]:.1f}</h2>
             <p style="opacity:0.8;">{rmse_line}</p>
             </div>""", unsafe_allow_html=True)
 
 st.markdown("#### Predicted AQI Trend")
-trend_df = pd.DataFrame({"day": ["Today"] + [f"+{h}d" for h in HORIZONS],
-                          "aqi": [current_aqi] + list(preds)})
+day_labels = [f"Today, {base_date.strftime('%b %d')}"] + [f"+{h}d, {(base_date + dt.timedelta(days=h)).strftime('%b %d')}" for h in HORIZONS]
+trend_df = pd.DataFrame({"day": day_labels, "aqi": [current_aqi] + list(preds)})
 fig_trend = px.line(trend_df, x="day", y="aqi", markers=True)
 fig_trend.update_traces(line_color=palette["accent"])
 style_fig(fig_trend, palette)
