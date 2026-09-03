@@ -145,6 +145,12 @@ def inject_theme(city_key, dark_mode):
     .glass-card, [data-testid="stMetric"] {{
         transition: transform 0.15s ease;
     }}
+    /* Guaranteed CSS fallback (fixed tilt) in case the JS below can't reach
+       across the component iframe on this host. The JS overrides this
+       inline with a cursor-direction tilt whenever it does load. */
+    .glass-card:hover, [data-testid="stMetric"]:hover {{
+        transform: perspective(700px) translateY(-4px) rotateY(6deg);
+    }}
     h1, h2, h3, h4, p, label, span:not(.badge) {{ color: {p['text']} !important; }}
     .badge {{ display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; font-size:0.85em; }}
 
@@ -293,7 +299,7 @@ def inject_theme(city_key, dark_mode):
                 const tilt = (0.5 - xRatio) * 14;  // left side -> positive tilt, right side -> negative
                 card.style.transform = `perspective(700px) translateY(-4px) rotateY(${tilt}deg)`;
             });
-            card.addEventListener('mouseleave', () => { card.style.transform = "perspective(700px) translateY(0) rotateY(0deg)"; });
+            card.addEventListener('mouseleave', () => { card.style.transform = ""; });
         });
     }
     bindTilt();
