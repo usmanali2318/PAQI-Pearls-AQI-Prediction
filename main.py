@@ -296,7 +296,7 @@ def load_model():
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
 READ_TIMEOUT_S = 300
-FIRST_READ_DAYS = 95  # covers the 90-day chart plus a small buffer - no need to pull all 3 years cold
+FIRST_READ_DAYS = 183  # ~6 months - covers the hourly trend chart with a small buffer
 
 def _fetch_since(fg, since_ts):
     # Bounded read the first time (last FIRST_READ_DAYS) instead of the whole
@@ -568,15 +568,14 @@ st.markdown(
     f"Showing {city} by default; click a city name in any legend to add it for comparison.</p>",
     unsafe_allow_html=True,
 )
-eda_daily = aggregate_daily(raw_df)
-
 st.markdown("##### AQI trend over time")
-eda_daily["date_pkt"] = pd.to_datetime(eda_daily["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
-fig_line = px.line(eda_daily, x="date_pkt", y="aqi", color="city", color_discrete_map=CITY_COLORS)
+trend_hourly = raw_df.copy()
+trend_hourly["date_pkt"] = pd.to_datetime(trend_hourly["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
+fig_line = px.line(trend_hourly, x="date_pkt", y="aqi", color="city", color_discrete_map=CITY_COLORS)
 fig_line.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
-fig_line.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y"))
+fig_line.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y %H:%M"))
 style_fig(fig_line, palette)
-add_markers(fig_line, palette, size=4)
+add_markers(fig_line, palette, size=3)
 show_only_selected_city(fig_line, city_key)
 st.plotly_chart(fig_line, use_container_width=True)
 
