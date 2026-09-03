@@ -28,6 +28,20 @@ def us_aqi(pm25, pm10):
 def load_data():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     fg = project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
+
+    # Reuse yesterday's own history.parquet snapshot (already saved to the
+    # model registry each run) instead of always re-reading the full 3 years.
+    # Only pull rows newer than that snapshot's max timestamp - a tiny query -
+    # then merge. Falls back to a full read if there's no prior snapshot yet.
+    prev_df = None
+    try:
+        mr = project.get_model_registry()
+        m = mr.get_model("multi_city_aqi_daily_model", version=1)
+        prev_path = m.download(local_path=__import__("tempfile").mkdtemp())
+        prev_df = pd.read_parquet(f"{prev_path}/history.parquet")
+    except Exception:
+        prev_df = None  # first run ever, or older bundle without a snapshot yet
+
     # Note: this hopsworks client version only reads via the Arrow Flight Query
     # Service - there's no working Hive fallback to route around an outage there.
     # This is an unattended scheduled run, so retry a transient connection drop
@@ -37,7 +51,11 @@ def load_data():
             print(f"Feature store read failed, retrying in {wait}s (attempt {attempt}/3)...")
             time.sleep(wait)
         try:
-            df = fg.read()
+            if prev_df is not None:
+                new_rows = fg.filter(fg.timestamp > int(prev_df["timestamp"].max())).read()
+                df = pd.concat([prev_df, new_rows], ignore_index=True).drop_duplicates(["city", "timestamp"])
+            else:
+                df = fg.read()
             break
         except Exception:
             if attempt == 3:
