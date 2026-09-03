@@ -352,6 +352,13 @@ def typical_peak_hours(df):
 
 if __name__ == "__main__":
     df, project = load_data()
+    # Piggyback a raw hourly snapshot on the full read this job already pays
+    # for, so the dashboard can seed its cache from the model bundle instead
+    # of running its own large Hopsworks feature-store reads. Zero extra
+    # Hopsworks cost - `df` is already in memory here.
+    os.makedirs("model_dir", exist_ok=True)
+    df.to_parquet("model_dir/history.parquet", index=False)
+
     typical_peak_hours(df)
     df = aggregate_daily(df)
     print(f"Aggregated to {len(df)} city-days")

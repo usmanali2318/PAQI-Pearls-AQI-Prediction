@@ -292,7 +292,11 @@ def load_model():
             eval_scores = json.load(f)
     except FileNotFoundError:
         eval_scores = None  # older model bundle, predates this file being saved
-    return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores
+    try:
+        history_df = pd.read_parquet(f"{path}/history.parquet")
+    except FileNotFoundError:
+        history_df = None  # older model bundle, predates the training job saving this snapshot
+    return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores, history_df
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
 READ_TIMEOUT_S = 300
@@ -315,18 +319,20 @@ def _fetch_since(fg, since_ts):
         return query.read(read_options={"use_hive": True})
 
 @st.cache_data(ttl=1200)
-def load_recent_data(_project):
+def load_recent_data(_project, history_df=None):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
 
-    # If the cache doesn't reach back a full FIRST_READ_DAYS (e.g. it was
-    # built under an older, shorter window, or the app is new), drop it and
-    # do one full bounded re-read instead of only ever pulling forward from
-    # its max timestamp - otherwise the chart stays stuck at whatever window
-    # the cache originally happened to cover.
+    # If the cache doesn't reach back a full FIRST_READ_DAYS, prefer seeding
+    # from the training job's daily history.parquet snapshot (free - it's
+    # already downloaded as part of the model bundle) over paying for our
+    # own large Hopsworks feature-store read. Only fall back to a live bounded
+    # read if that snapshot isn't available either (e.g. an older bundle).
     cutoff_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
     if cached is not None and cached["timestamp"].min() > cutoff_ts:
         cached = None
+    if cached is None and history_df is not None:
+        cached = history_df
 
     since_ts = int(cached["timestamp"].max()) if cached is not None else None
 
@@ -386,10 +392,10 @@ def build_live_features(daily):
     daily = pd.concat([daily, pd.get_dummies(daily["city"], prefix="city").astype(int)], axis=1)
     return daily.dropna(subset=["lag_7d", "rolling_mean_14d"]).reset_index(drop=True)
 
-point_model, quantile_models, project, holdout_preds, eval_scores = load_model()
+point_model, quantile_models, project, holdout_preds, eval_scores, history_df = load_model()
 try:
     with st.spinner("Loading latest AQI data..."):
-        raw_df = load_recent_data(project)
+        raw_df = load_recent_data(project, history_df)
 except Exception:
     st.error("Hopsworks' live data service is down and there's no cached data yet to fall back on. "
              "This is an outage on Hopsworks' end, not this app - please try again shortly.")
