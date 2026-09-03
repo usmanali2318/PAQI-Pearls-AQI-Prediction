@@ -300,10 +300,9 @@ FIRST_READ_DAYS = 183  # ~6 months - covers the hourly trend chart with a small 
 
 def _fetch_since(fg, since_ts):
     # Bounded read the first time (last FIRST_READ_DAYS) instead of the whole
-    # feature group - the UI never shows more than ~90 days anyway. After
-    # that, only rows newer than what's already cached - cuts down how much
-    # this query scans/transfers against Hopsworks' usage limits on every
-    # 20-min refresh.
+    # feature group. After that, only rows newer than what's already cached -
+    # cuts down how much this query scans/transfers against Hopsworks' usage
+    # limits on every 20-min refresh.
     if since_ts is None:
         since_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
     query = fg.filter(fg.timestamp > since_ts)
@@ -319,6 +318,16 @@ def _fetch_since(fg, since_ts):
 def load_recent_data(_project):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
+
+    # If the cache doesn't reach back a full FIRST_READ_DAYS (e.g. it was
+    # built under an older, shorter window, or the app is new), drop it and
+    # do one full bounded re-read instead of only ever pulling forward from
+    # its max timestamp - otherwise the chart stays stuck at whatever window
+    # the cache originally happened to cover.
+    cutoff_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
+    if cached is not None and cached["timestamp"].min() > cutoff_ts:
+        cached = None
+
     since_ts = int(cached["timestamp"].max()) if cached is not None else None
 
     last_err = None
@@ -571,6 +580,10 @@ st.markdown(
 st.markdown("##### AQI trend over time")
 trend_hourly = raw_df.copy()
 trend_hourly["date_pkt"] = pd.to_datetime(trend_hourly["timestamp"], unit="s", utc=True).dt.tz_convert(ZoneInfo("Asia/Karachi"))
+# Sort before plotting - px.line draws points in row order, and rows weren't
+# guaranteed chronological (concat of cached + newly-fetched rows), which is
+# what caused the stray diagonal lines cutting across the chart.
+trend_hourly = trend_hourly.sort_values(["city", "date_pkt"])
 fig_line = px.line(trend_hourly, x="date_pkt", y="aqi", color="city", color_discrete_map=CITY_COLORS)
 fig_line.update_traces(hovertemplate="%{fullData.name}: <b>%{y:.0f}</b><extra></extra>")
 fig_line.update_layout(hovermode="x unified", xaxis=dict(hoverformat="%b %d, %Y %H:%M"))
