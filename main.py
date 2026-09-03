@@ -271,7 +271,7 @@ def inject_theme(city_key, dark_mode):
     .st-key-current_aqi_card [data-testid="stColumn"] {{ flex: 1 1 0; }}
     .st-key-current_aqi_card [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{
         background: transparent !important; border: none !important; padding: 0 !important;
-        border-radius: 0 !important; backdrop-filter: none !important;
+        border-radius: 0 !important; backdrop-filter: none !important; box-shadow: none !important;
     }}
     .aqi-category-block {{ display: flex; flex-direction: column; align-items: flex-start; }}
     </style>
@@ -291,9 +291,9 @@ def inject_theme(city_key, dark_mode):
                 const r = card.getBoundingClientRect();
                 const xRatio = (e.clientX - r.left) / r.width;  // 0 = left edge, 1 = right edge
                 const tilt = (0.5 - xRatio) * 14;  // left side -> positive tilt, right side -> negative
-                card.style.transform = `perspective(700px) rotateY(${tilt}deg)`;
+                card.style.transform = `perspective(700px) translateY(-4px) rotateY(${tilt}deg)`;
             });
-            card.addEventListener('mouseleave', () => { card.style.transform = "perspective(700px) rotateY(0deg)"; });
+            card.addEventListener('mouseleave', () => { card.style.transform = "perspective(700px) translateY(0) rotateY(0deg)"; });
         });
     }
     bindTilt();
@@ -549,7 +549,7 @@ with c4:
 # --- 3-day forecast cards ---
 st.markdown('<div id="nav-forecast"></div>', unsafe_allow_html=True)
 st.markdown("#### 3-Day Forecast")
-base_date = pd.to_datetime(int(latest["timestamp"].iloc[0]), unit="s").date()
+base_date = dt.datetime.now(ZoneInfo("Asia/Karachi")).date()
 fcols = st.columns(len(HORIZONS))
 for i, h in enumerate(HORIZONS):
     label, color = aqi_category(preds[i])
