@@ -134,10 +134,8 @@ def inject_theme(city_key, dark_mode):
         background: {p['card']}88; border: 1px solid {p['border']}88;
         border-radius: 14px; padding: 10px; backdrop-filter: blur(12px);
     }}
-    /* Constant depth for every card, graphs included - shadow is baseline,
-       not hover-triggered. Non-graph cards get a cursor-tilt on hover
-       (handled by the small JS block below); graph containers are left
-       static so charts don't jitter or feel interactive on hover. */
+    /* Constant shadow on every card, graphs included; non-graph cards also
+       get a hover tilt via CSS/JS below - graph containers stay static. */
     .glass-card, [data-testid="stMetric"], .plotly-chart-card,
     [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{
         box-shadow: {"0 8px 20px rgba(0,0,0,0.35)" if dark_mode else "0 8px 20px rgba(40,69,57,0.18)"};
@@ -145,11 +143,9 @@ def inject_theme(city_key, dark_mode):
     .glass-card, [data-testid="stMetric"] {{
         transition: transform 0.15s ease;
     }}
-    /* Guaranteed CSS fallback (fixed tilt) in case the JS below can't reach
-       across the component iframe on this host. The JS overrides this
-       inline with a cursor-direction tilt whenever it does load. */
+    /* CSS-only fallback tilt, overridden inline by the JS below when it loads */
     .glass-card:hover, [data-testid="stMetric"]:hover {{
-        transform: perspective(700px) translateY(-4px) rotateY(6deg);
+        transform: perspective(500px) translateY(-4px) rotateY(14deg);
     }}
     h1, h2, h3, h4, p, label, span:not(.badge) {{ color: {p['text']} !important; }}
     .badge {{ display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; font-size:0.85em; }}
@@ -282,9 +278,8 @@ def inject_theme(city_key, dark_mode):
     .aqi-category-block {{ display: flex; flex-direction: column; align-items: flex-start; }}
     </style>
     """, unsafe_allow_html=True)
-    # Cursor-position tilt for non-graph cards only. Runs in the component's
-    # iframe but reaches the real page via window.parent (same-origin), since
-    # st.markdown-injected <script> tags aren't executed by the browser.
+    # Cursor-tilt for non-graph cards; reaches the real DOM via window.parent
+    # since inline <script> tags from st.markdown don't get executed.
     components.html("""
     <script>
     const doc = window.parent.document;
@@ -292,12 +287,11 @@ def inject_theme(city_key, dark_mode):
         doc.querySelectorAll('.glass-card, [data-testid="stMetric"]').forEach(card => {
             if (card.dataset.tiltBound) return;
             card.dataset.tiltBound = "1";
-            card.style.transformStyle = "preserve-3d";
             card.addEventListener('mousemove', e => {
                 const r = card.getBoundingClientRect();
-                const xRatio = (e.clientX - r.left) / r.width;  // 0 = left edge, 1 = right edge
-                const tilt = (0.5 - xRatio) * 14;  // left side -> positive tilt, right side -> negative
-                card.style.transform = `perspective(700px) translateY(-4px) rotateY(${tilt}deg)`;
+                const xRatio = (e.clientX - r.left) / r.width;
+                const tilt = (0.5 - xRatio) * 28;
+                card.style.transform = `perspective(500px) translateY(-4px) rotateY(${tilt}deg)`;
             });
             card.addEventListener('mouseleave', () => { card.style.transform = ""; });
         });
