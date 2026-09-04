@@ -302,7 +302,7 @@ def inject_theme(city_key, dark_mode):
     """, height=0)
     return p
 
-@st.cache_resource(ttl=3600)
+@st.cache_resource(ttl=21600)  # model only retrains once/day - no need to recheck the registry every hour
 def load_model():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     mr = project.get_model_registry()
@@ -344,7 +344,7 @@ def _fetch_since(fg, since_ts):
         # older Hive/JDBC read path, which doesn't depend on Flight.
         return query.read(read_options={"use_hive": True})
 
-@st.cache_data(ttl=1200)
+@st.cache_data(ttl=3600)  # feature_pipeline only writes hourly - matching this to it, not undercutting it
 def load_recent_data(_project, history_df=None):
     fg = _project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
     cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
