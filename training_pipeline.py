@@ -37,6 +37,7 @@ def load_data():
     try:
         mr = project.get_model_registry()
         m = mr.get_model("multi_city_aqi_daily_model", version=1)
+        print(f"[hopsworks call] training: model registry download at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
         prev_path = m.download(local_path=__import__("tempfile").mkdtemp())
         prev_df = pd.read_parquet(f"{prev_path}/history.parquet")
     except Exception:
@@ -52,9 +53,11 @@ def load_data():
             time.sleep(wait)
         try:
             if prev_df is not None:
+                print(f"[hopsworks call] training: incremental feature-store read at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
                 new_rows = fg.filter(fg.timestamp > int(prev_df["timestamp"].max())).read()
                 df = pd.concat([prev_df, new_rows], ignore_index=True).drop_duplicates(["city", "timestamp"])
             else:
+                print(f"[hopsworks call] training: full feature-store read at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
                 df = fg.read()
             break
         except Exception:
@@ -324,6 +327,7 @@ def save_to_registry(project, model, name, quantile_models, day6_scores, holdout
                                             "comparison), and holdout_predictions.csv (per-city actual vs predicted for the last 90 days, "
                                             "never seen during training).")
     try:
+        print(f"[hopsworks call] training: model registry upload at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
         m.save("model_dir")
     except Exception as e:
         print(f"Model uploaded, but Hopsworks' status check failed (known cluster issue): {e}")

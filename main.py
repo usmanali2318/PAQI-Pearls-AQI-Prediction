@@ -307,6 +307,7 @@ def load_model():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     mr = project.get_model_registry()
     m = mr.get_model("multi_city_aqi_daily_model", version=1)
+    print(f"[hopsworks call] model registry download at {dt.datetime.now(dt.timezone.utc)}")
     path = m.download(local_path=tempfile.mkdtemp())
     bundle = joblib.load(f"{path}/model.pkl")
     try:
@@ -336,6 +337,7 @@ def _fetch_since(fg, since_ts):
     if since_ts is None:
         since_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
     query = fg.filter(fg.timestamp > since_ts)
+    print(f"[hopsworks call] feature-store read since {since_ts} at {dt.datetime.now(dt.timezone.utc)}")
     try:
         return query.read()
     except Exception:
