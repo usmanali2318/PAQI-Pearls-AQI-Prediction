@@ -57,11 +57,11 @@ Two checks, both against a "tomorrow = today" persistence baseline:
    training pool before the model family search even runs, so the deployed
    model has genuinely never seen them. This is the stricter test.
 
-Current best model: LightGBM.
+Current best model: HisttGB.
 
 | | RMSE | MAE | R2 |
 |---|---|---|---|
-| Every-6th-day split | 15.70 | 11.13 | 0.827 |
+| Every-6th-day split | 15.54 | 11.29 | 0.835 |
 | Last-90-days holdout | 18.24 | 13.10 | 0.647 |
 
 Both beat the persistence baseline on their respective test sets.
