@@ -772,7 +772,7 @@ st.markdown(f"""
     background: {palette['card']}88; backdrop-filter: blur(12px); border-radius: 0;
 }}
 .app-footer .footer-cols {{
-    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 28px;
+    display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 64px; margin-bottom: 28px; max-width: 900px;
 }}
 .app-footer .footer-heading {{ font-size: 0.95rem; font-weight: 700; margin-bottom: 12px; color: {palette['text']}; }}
 .app-footer .footer-cols p {{ margin: 6px 0; font-size: 0.88rem; opacity: 0.75; color: {palette['text']}; }}
