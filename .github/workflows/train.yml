@@ -23,5 +23,3 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}

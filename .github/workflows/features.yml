@@ -2,8 +2,8 @@ name: Feature Pipeline
 
 on:
   #schedule:
-    #- cron: "0 * * * *"  ron-job.org drives the hourly schedule via workflow_dispatch
-  workflow_dispatch:  # what cron-job.org calls
+    #- cron: "0 * * * *"  only - cron-job.org drives the real hourly schedule via workflow_dispatch
+  workflow_dispatch:  # allows manual trigger, and is what cron-job.org calls
 
 jobs:
   run:
@@ -24,5 +24,3 @@ jobs:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
