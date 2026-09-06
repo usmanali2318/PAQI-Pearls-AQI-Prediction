@@ -773,7 +773,7 @@ st.markdown(f"""
 .app-footer .footer-cols {{
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 28px;
 }}
-.app-footer h4 {{ font-size: 0.95rem; margin-bottom: 12px; color: {palette['text']}; }}
+.app-footer .footer-heading {{ font-size: 0.95rem; font-weight: 700; margin-bottom: 12px; color: {palette['text']}; }}
 .app-footer .footer-cols p {{ margin: 6px 0; font-size: 0.88rem; opacity: 0.75; color: {palette['text']}; }}
 .app-footer .footer-cols a {{ color: {palette['text']}; opacity: 0.75; text-decoration: none; }}
 .app-footer .footer-cols a:hover {{ opacity: 1; text-decoration: underline; }}
@@ -791,21 +791,21 @@ st.markdown(f"""
 <div class="app-footer" id="nav-footer">
     <div class="footer-cols">
         <div>
-            <h4>About This Project</h4>
+            <div class="footer-heading">About This Project</div>
             <p>ML-powered 3-day AQI forecasts for 5 Pakistani cities, built as a data science capstone at 10Pearls.</p>
         </div>
         <div>
-            <h4>Get Help</h4>
+            <div class="footer-heading">Get Help</div>
             <p><a href="mailto:susmanali18705@gmail.com">Report an issue</a></p>
             <p><a href="mailto:susmanali18705@gmail.com">Ask how it works</a></p>
         </div>
         <div>
-            <h4>Project</h4>
+            <div class="footer-heading">Project</div>
             <p><a href="https://github.com/usmanali2318/PAQI-Pearls-AQI-Prediction" target="_blank">Source Code</a></p>
             <p><a href="#nav-models">Model Comparison</a></p>
         </div>
         <div>
-            <h4>Connect</h4>
+            <div class="footer-heading">Connect</div>
             <p><a href="https://www.linkedin.com/in/syedusmanali2318/" target="_blank">LinkedIn</a></p>
             <p><a href="mailto:susmanali18705@gmail.com">Email</a></p>
         </div>
