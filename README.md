@@ -17,24 +17,27 @@ For each city it shows:
 
 ## How it's built
 
-Four pipelines, one dashboard:
+Four pipelines, one dashboard, all sharing a Supabase backend (a Postgres
+table for feature data, a Storage bucket for the model registry):
 
 - **backfill.py** - one-time (or occasional) pull of 3 years of hourly AQI and
   weather history from Open-Meteo, for all 5 cities and their district points,
-  into a Hopsworks feature store.
+  into the Supabase feature table.
 - **feature_pipeline.py** - runs hourly (GitHub Actions), fetches the latest
-  hour's readings from Open-Meteo and appends them to the same feature store.
+  hour's readings from Open-Meteo and appends them to the same feature table.
   OpenWeather is only used as a last-resort fallback if Open-Meteo doesn't
   respond after 3 retries, for both pollution and weather. In normal operation
   it isn't called at all.
 - **training_pipeline.py** - runs on a schedule (GitHub Actions), trains
   several model families (RandomForest, HistGB, XGBoost, LightGBM, CatBoost,
   Ridge, a small feedforward NN, and a stacked ensemble), picks the best one,
-  and saves it to the Hopsworks Model Registry along with its evaluation scores
-  and holdout predictions.
+  and saves it to Supabase Storage along with its evaluation scores and
+  holdout predictions. It also saves a snapshot of the raw feature data
+  (`history.parquet`) that both it and the dashboard reuse the next day
+  instead of re-reading the whole table.
 - **main.py** - the Streamlit app. Loads the latest model and its scores
-  straight from the registry on every run, so the numbers shown always match
-  whatever model is actually deployed.
+  straight from Supabase Storage on every run, so the numbers shown always
+  match whatever model is actually deployed.
 
 ## Data source
 
@@ -70,7 +73,7 @@ pip install -r requirements.txt
 streamlit run main.py
 ```
 
-Needs `HOPSWORKS_API_KEY` and `HOPSWORKS_PROJECT` set as environment variables.
+Needs `SUPABASE_URL` and `SUPABASE_KEY` set as environment variables.
 `backfill.py` and `feature_pipeline.py` also need `OPENWEATHER_API_KEY` for the
 fallback path.
 
@@ -89,10 +92,11 @@ report/                  project report (PDF)
 
 ## Known limitations
 
-- Hopsworks' free tier has a monthly compute budget, and reads from the
-  feature store (via the Feature Query Service) are the main thing that eats
-  into it. Retraining or backfilling too often will burn through it faster
-  than normal hourly operation does.
+- Supabase's free tier is a flat monthly allowance rather than per-query
+  billing, so normal hourly operation doesn't eat into it the way the
+  previous backend's per-read pricing did. It still has storage and
+  bandwidth ceilings, though - sustained growth in historical data will
+  eventually need a paid tier or an archival strategy for older rows.
 - The dashboard's live "current AQI" reflects the last hourly pipeline run,
   not a live-at-page-load fetch - it's as fresh as the most recent hour, not
   the second.
