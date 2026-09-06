@@ -450,6 +450,7 @@ st.markdown("""
     <a href="#nav-why"><span>Why This Prediction</span></a>
     <a href="#eda-anchor"><span>EDA</span></a>
     <a href="#nav-models"><span>Model Comparison</span></a>
+    <a href="#nav-footer"><span>Contact</span></a>
 </div>
 """, unsafe_allow_html=True)
 
@@ -747,19 +748,56 @@ else:
 st.markdown(f"""
 <style>
 .app-footer {{
-    margin-top: 40px; padding: 24px 0; border-top: 1px solid {palette['border']};
-    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
-    color: {palette['text']}; opacity: 0.85; font-size: 0.9rem;
+    margin-top: 50px; padding: 40px 32px 24px; border-top: 1px solid {palette['border']};
+    background: {palette['card']}; border-radius: 16px 16px 0 0;
 }}
-.app-footer a {{ color: {palette['accent']}; text-decoration: none; margin-left: 16px; }}
-.app-footer a:hover {{ text-decoration: underline; }}
+.app-footer .footer-cols {{
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 28px;
+}}
+.app-footer h4 {{ font-size: 0.95rem; margin-bottom: 12px; color: {palette['text']}; }}
+.app-footer .footer-cols p {{ margin: 6px 0; font-size: 0.88rem; opacity: 0.75; color: {palette['text']}; }}
+.app-footer .footer-cols a {{ color: {palette['text']}; opacity: 0.75; text-decoration: none; }}
+.app-footer .footer-cols a:hover {{ opacity: 1; text-decoration: underline; }}
+.app-footer .footer-bottom {{
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    padding-top: 20px; border-top: 1px solid {palette['border']}; font-size: 0.82rem; opacity: 0.65; color: {palette['text']};
+}}
+.app-footer .social-icons a {{
+    display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+    border-radius: 50%; border: 1px solid {palette['border']}; margin-left: 10px; color: {palette['text']};
+    text-decoration: none; font-size: 0.95rem; transition: background 0.15s ease;
+}}
+.app-footer .social-icons a:hover {{ background: {palette['accent']}33; }}
 </style>
-<div class="app-footer">
-    <span>Built by Usman Ali &middot; questions, bugs, or want to know how this works? Reach out.</span>
-    <span>
-        <a href="https://www.linkedin.com/in/syedusmanali2318/" target="_blank">LinkedIn</a>
-        <a href="https://github.com/usmanali2318/PAQI-Pearls-AQI-Prediction" target="_blank">GitHub</a>
-        <a href="mailto:susmanali18705@gmail.com">Email</a>
-    </span>
+<div class="app-footer" id="nav-footer">
+    <div class="footer-cols">
+        <div>
+            <h4>About This Project</h4>
+            <p>ML-powered 3-day AQI forecasts for 5 Pakistani cities, built as a data science capstone at 10Pearls.</p>
+        </div>
+        <div>
+            <h4>Get Help</h4>
+            <p><a href="mailto:susmanali18705@gmail.com">Report an issue</a></p>
+            <p><a href="mailto:susmanali18705@gmail.com">Ask how it works</a></p>
+        </div>
+        <div>
+            <h4>Project</h4>
+            <p><a href="https://github.com/usmanali2318/PAQI-Pearls-AQI-Prediction" target="_blank">Source Code</a></p>
+            <p><a href="#nav-models">Model Comparison</a></p>
+        </div>
+        <div>
+            <h4>Connect</h4>
+            <p><a href="https://www.linkedin.com/in/syedusmanali2318/" target="_blank">LinkedIn</a></p>
+            <p><a href="mailto:susmanali18705@gmail.com">Email</a></p>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <span>&copy; 2026 Usman Ali &middot; PAQI - Pearls AQI Predictor</span>
+        <span class="social-icons">
+            <a href="https://www.linkedin.com/in/syedusmanali2318/" target="_blank" title="LinkedIn">in</a>
+            <a href="https://github.com/usmanali2318/PAQI-Pearls-AQI-Prediction" target="_blank" title="GitHub">GH</a>
+            <a href="mailto:susmanali18705@gmail.com" title="Email">@</a>
+        </span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
