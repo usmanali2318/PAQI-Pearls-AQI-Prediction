@@ -1,4 +1,4 @@
-import os, time, json, joblib, numpy as np, pandas as pd
+import os, io, time, json, joblib, numpy as np, pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor, HistGradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
@@ -10,7 +10,8 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
-import hopsworks
+# import hopsworks  # commented out during Supabase migration - rollback: uncomment this + the hopsworks load_data/save_to_registry below
+from supabase import create_client
 
 HORIZONS = [1, 2, 3]  # days ahead -> tomorrow, day after, day after that
 
@@ -25,6 +26,8 @@ def us_aqi(pm25, pm10):
         return bp[-1][3]
     return round(max(sub_index(pm25, PM25_BP), sub_index(pm10, PM10_BP)))
 
+# --- Hopsworks version, kept for rollback - not used while on Supabase ---
+"""
 def load_data():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     fg = project.get_feature_store().get_feature_group("multi_city_aqi_features", version=1)
@@ -64,6 +67,55 @@ def load_data():
             if attempt == 3:
                 raise
     return df.sort_values(["city", "timestamp"]).reset_index(drop=True), project
+"""
+
+def load_data():
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+
+    # Reuse yesterday's own history.parquet snapshot (saved to Storage each
+    # run) instead of always re-reading the whole table. Only pull rows newer
+    # than that snapshot's max timestamp, then merge. Falls back to a full
+    # (paginated) read if there's no prior snapshot yet.
+    prev_df = None
+    try:
+        print(f"[supabase call] training: history.parquet download at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
+        raw = sb.storage.from_("models").download("history.parquet")
+        prev_df = pd.read_parquet(io.BytesIO(raw))
+    except Exception:
+        prev_df = None  # first run ever, or bucket doesn't have a snapshot yet
+
+    since_ts = int(prev_df["timestamp"].max()) if prev_df is not None else None
+    label = "incremental" if since_ts is not None else "full"
+    rows, offset, page_size = [], 0, 1000
+    while True:
+        q = sb.table("aqi_features").select("*")
+        if since_ts is not None:
+            q = q.gt("timestamp", since_ts)
+        q = q.order("timestamp").range(offset, offset + page_size - 1)
+        for attempt, wait in enumerate([0, 60, 180], start=1):
+            if wait:
+                print(f"Supabase read failed, retrying in {wait}s (attempt {attempt}/3)...")
+                time.sleep(wait)
+            try:
+                print(f"[supabase call] training: {label} table read (offset {offset}) at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
+                res = q.execute()
+                break
+            except Exception:
+                if attempt == 3:
+                    raise
+        if not res.data:
+            break
+        rows.extend(res.data)
+        offset += page_size
+        if len(res.data) < page_size:
+            break
+
+    new_rows = pd.DataFrame(rows)
+    if prev_df is not None:
+        df = pd.concat([prev_df, new_rows], ignore_index=True).drop_duplicates(["city", "timestamp"]) if len(new_rows) else prev_df
+    else:
+        df = new_rows
+    return df.sort_values(["city", "timestamp"]).reset_index(drop=True)
 
 def category_accuracy(y_true, y_pred):
     bins = [50, 100, 150, 200, 300]
@@ -305,6 +357,8 @@ def evaluate_holdout(df_holdout, best_model):
     })
     return scores, pred_rows
 
+# --- Hopsworks version, kept for rollback - not used while on Supabase ---
+"""
 def save_to_registry(project, model, name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models):
     os.makedirs("model_dir", exist_ok=True)
     joblib.dump({"point_model": model, "quantile_models": quantile_models}, "model_dir/model.pkl")
@@ -332,6 +386,25 @@ def save_to_registry(project, model, name, quantile_models, day6_scores, holdout
     except Exception as e:
         print(f"Model uploaded, but Hopsworks' status check failed (known cluster issue): {e}")
         print("Check the Model Registry in the Hopsworks UI to confirm - it's almost always there anyway.")
+"""
+
+def save_to_registry(model, name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models):
+    os.makedirs("model_dir", exist_ok=True)
+    joblib.dump({"point_model": model, "quantile_models": quantile_models}, "model_dir/model.pkl")
+
+    with open("model_dir/eval_scores.json", "w") as f:
+        json.dump({"day6_split": day6_scores, "last_90_days": holdout_scores, "model_comparison": top_models}, f, indent=2)
+    if holdout_preds is not None:
+        holdout_preds.to_csv("model_dir/holdout_predictions.csv", index=False)
+
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+    print(f"[supabase call] training: model bundle upload at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
+    for fname in ["model.pkl", "eval_scores.json", "holdout_predictions.csv", "history.parquet"]:
+        path = f"model_dir/{fname}"
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as f:
+            sb.storage.from_("models").upload(fname, f, {"upsert": "true"})
 
 def per_city_diagnostic(df):
     target_cols = [f"target_{h}d" for h in HORIZONS]
@@ -373,11 +446,11 @@ def typical_peak_hours(df):
               f"(avg AQI in these hours: {hourly_avg.head(3).mean():.1f} vs city avg {sub['aqi'].mean():.1f})")
 
 if __name__ == "__main__":
-    df, project = load_data()
+    df = load_data()  # rollback note: hopsworks load_data() above returns (df, project) - restore that unpacking too if reverting
     # Piggyback a raw hourly snapshot on the full read this job already pays
     # for, so the dashboard can seed its cache from the model bundle instead
-    # of running its own large Hopsworks feature-store reads. Zero extra
-    # Hopsworks cost - `df` is already in memory here.
+    # of running its own large Supabase reads. Zero extra cost - `df` is
+    # already in memory here.
     os.makedirs("model_dir", exist_ok=True)
     df.to_parquet("model_dir/history.parquet", index=False)
 
@@ -396,5 +469,5 @@ if __name__ == "__main__":
 
     best_name, best_model, quantile_models, day6_scores, top_models = train_eval(df_main)
     holdout_scores, holdout_preds = evaluate_holdout(df_holdout, best_model)
-    save_to_registry(project, best_model, best_name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models)
-    print("Model saved to Hopsworks Model Registry.")
+    save_to_registry(best_model, best_name, quantile_models, day6_scores, holdout_scores, holdout_preds, top_models)
+    print("Model saved to Supabase Storage.")

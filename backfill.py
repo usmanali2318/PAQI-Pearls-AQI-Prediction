@@ -1,6 +1,7 @@
 import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timedelta, timezone
-import hopsworks
+# import hopsworks  # commented out during Supabase migration - rollback: uncomment this + push_to_hopsworks below
+from supabase import create_client
 
 DAYS_BACK = 1095
 
@@ -115,15 +116,35 @@ def build_dataset():
     df[["timestamp", "hour", "day", "month", "day_of_week"]] = df[["timestamp", "hour", "day", "month", "day_of_week"]].astype("int64")
     return df
 
+# --- Hopsworks version, kept for rollback - not used while on Supabase ---
+"""
 def push_to_hopsworks(df):
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     fg = project.get_feature_store().get_or_create_feature_group(
         name="multi_city_aqi_features", version=1, primary_key=["timestamp", "city"], event_time="timestamp")
     fg.insert(df)
+"""
+
+def push_to_supabase(df, chunk_size=1000):
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+    records = df.to_dict("records")
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i:i + chunk_size]
+        for attempt in range(3):
+            try:
+                sb.table("aqi_features").upsert(chunk).execute()
+                break
+            except Exception as e:
+                if attempt < 2:
+                    print(f"Chunk {i}-{i+len(chunk)} failed ({e}), retrying in 15s...")
+                    time.sleep(15)
+                else:
+                    raise
+        print(f"Inserted rows {i} - {i+len(chunk)} of {len(records)}")
 
 if __name__ == "__main__":
     df = build_dataset()
     print(f"Backfilled {len(df)} rows across {df['city'].nunique()} cities: "
           f"{pd.to_datetime(df['timestamp'].min(), unit='s')} -> {pd.to_datetime(df['timestamp'].max(), unit='s')}")
-    push_to_hopsworks(df)
-    print("Backfill inserted into Hopsworks.")
+    push_to_supabase(df)
+    print("Backfill inserted into Supabase.")
