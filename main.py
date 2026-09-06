@@ -8,7 +8,8 @@ import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import plotly.express as px
 import shap
-import hopsworks
+# import hopsworks  # commented out during Supabase migration - rollback: uncomment this + the hopsworks load_model/load_recent_data below
+from supabase import create_client
 from training_pipeline import aggregate_daily, HORIZONS
 
 st.set_page_config(page_title="Pakistan AQI Forecast", page_icon="assets/favicon.png", layout="wide")
@@ -302,7 +303,9 @@ def inject_theme(city_key, dark_mode):
     """, height=0)
     return p
 
-@st.cache_resource(ttl=21600)  # model only retrains once/day - no need to recheck the registry every hour
+# --- Hopsworks version, kept for rollback - not used while on Supabase ---
+"""
+@st.cache_resource(ttl=21600)
 def load_model():
     project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
     mr = project.get_model_registry()
@@ -324,11 +327,42 @@ def load_model():
     except FileNotFoundError:
         history_df = None  # older model bundle, predates the training job saving this snapshot
     return bundle["point_model"], bundle["quantile_models"], project, holdout_preds, eval_scores, history_df
+"""
+
+@st.cache_resource(ttl=21600)  # model only retrains once/day - no need to recheck the registry every hour
+def load_model():
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+    path = tempfile.mkdtemp()
+    print(f"[supabase call] model bundle download at {dt.datetime.now(dt.timezone.utc)}")
+    for fname in ["model.pkl", "eval_scores.json", "holdout_predictions.csv", "history.parquet"]:
+        try:
+            data = sb.storage.from_("models").download(fname)
+            with open(f"{path}/{fname}", "wb") as f:
+                f.write(data)
+        except Exception:
+            pass  # optional files - handled by the try/excepts below
+    bundle = joblib.load(f"{path}/model.pkl")
+    try:
+        holdout_preds = pd.read_csv(f"{path}/holdout_predictions.csv")
+    except FileNotFoundError:
+        holdout_preds = None  # older model bundle, predates this file being saved
+    try:
+        with open(f"{path}/eval_scores.json") as f:
+            eval_scores = json.load(f)
+    except FileNotFoundError:
+        eval_scores = None  # older model bundle, predates this file being saved
+    try:
+        history_df = pd.read_parquet(f"{path}/history.parquet")
+    except FileNotFoundError:
+        history_df = None  # older model bundle, predates the training job saving this snapshot
+    return bundle["point_model"], bundle["quantile_models"], sb, holdout_preds, eval_scores, history_df
 
 DATA_CACHE_FILE = "/tmp/paqi_last_good_features.parquet"
 READ_TIMEOUT_S = 300
 FIRST_READ_DAYS = 183  # ~6 months - covers the hourly trend chart with a small buffer
 
+# --- Hopsworks version, kept for rollback - not used while on Supabase ---
+"""
 def _fetch_since(fg, since_ts):
     # Bounded read the first time (last FIRST_READ_DAYS) instead of the whole
     # feature group. After that, only rows newer than what's already cached -
@@ -390,6 +424,70 @@ def load_recent_data(_project, history_df=None):
         st.warning("Hopsworks' live data service is unavailable right now - showing the last successfully loaded data.")
         return cached
     raise last_err
+"""
+
+def _fetch_since(sb, since_ts):
+    # Bounded read the first time (last FIRST_READ_DAYS) instead of the whole
+    # table. After that, only rows newer than what's already cached - cuts
+    # down how much this query pulls on every refresh. Paginated since
+    # Supabase's REST API caps rows per request.
+    if since_ts is None:
+        since_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
+    print(f"[supabase call] feature table read since {since_ts} at {dt.datetime.now(dt.timezone.utc)}")
+    rows, offset, page_size = [], 0, 1000
+    while True:
+        res = sb.table("aqi_features").select("*").gt("timestamp", since_ts) \
+            .order("timestamp").range(offset, offset + page_size - 1).execute()
+        if not res.data:
+            break
+        rows.extend(res.data)
+        offset += page_size
+        if len(res.data) < page_size:
+            break
+    return pd.DataFrame(rows)
+
+@st.cache_data(ttl=3600)  # feature_pipeline only writes hourly - matching this to it, not undercutting it
+def load_recent_data(_sb, history_df=None):
+    cached = pd.read_parquet(DATA_CACHE_FILE) if os.path.exists(DATA_CACHE_FILE) else None
+
+    # If the cache doesn't reach back a full FIRST_READ_DAYS, prefer seeding
+    # from the training job's daily history.parquet snapshot (free - it's
+    # already downloaded as part of the model bundle) over paying for our
+    # own large Supabase read. Only fall back to a live bounded read if that
+    # snapshot isn't available either (e.g. an older bundle).
+    cutoff_ts = int((dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FIRST_READ_DAYS)).timestamp())
+    if cached is not None and cached["timestamp"].min() > cutoff_ts:
+        cached = None
+    if cached is None and history_df is not None:
+        cached = history_df
+
+    since_ts = int(cached["timestamp"].max()) if cached is not None else None
+
+    last_err = None
+    for attempt in range(3):
+        ex = ThreadPoolExecutor(max_workers=1)
+        future = ex.submit(_fetch_since, _sb, since_ts)
+        try:
+            new_rows = future.result(timeout=READ_TIMEOUT_S)
+            ex.shutdown(wait=False)
+            df = new_rows if cached is None else pd.concat([cached, new_rows], ignore_index=True) \
+                .drop_duplicates(subset=["city", "timestamp"], keep="last")
+            df.to_parquet(DATA_CACHE_FILE)
+            return df
+        except Exception as e:
+            # Covers both a real failure and our own timeout. The background
+            # read thread is left to finish (or hang) on its own; its result
+            # is unused. Retry a couple more times with backoff before giving
+            # up and falling back to cached data.
+            ex.shutdown(wait=False)
+            last_err = e
+            if attempt < 2:
+                time.sleep(15 * (attempt + 1))
+                continue
+    if cached is not None:
+        st.warning("The live data service is unavailable right now - showing the last successfully loaded data.")
+        return cached
+    raise last_err
 
 def build_live_features(daily):
     g = daily.groupby("city")
@@ -420,10 +518,10 @@ def build_live_features(daily):
     daily = pd.concat([daily, pd.get_dummies(daily["city"], prefix="city").astype(int)], axis=1)
     return daily.dropna(subset=["lag_7d", "rolling_mean_14d"]).reset_index(drop=True)
 
-point_model, quantile_models, project, holdout_preds, eval_scores, history_df = load_model()
+point_model, quantile_models, sb, holdout_preds, eval_scores, history_df = load_model()
 try:
     with st.spinner("Loading latest AQI data..."):
-        raw_df = load_recent_data(project, history_df)
+        raw_df = load_recent_data(sb, history_df)
 except Exception:
     st.error("Hopsworks' live data service is down and there's no cached data yet to fall back on. "
              "This is an outage on Hopsworks' end, not this app - please try again shortly.")
