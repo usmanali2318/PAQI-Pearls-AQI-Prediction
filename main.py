@@ -109,6 +109,7 @@ def inject_theme(city_key, dark_mode):
         b64 = base64.b64encode(f.read()).decode()
     st.markdown(f"""
     <style>
+    html, body {{ overflow-x: hidden; }}
     .stApp {{
         background-image: url("data:image/webp;base64,{b64}");
         background-size: cover; background-position: center; background-attachment: fixed;
