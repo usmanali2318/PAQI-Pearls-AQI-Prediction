@@ -748,6 +748,7 @@ else:
 st.markdown(f"""
 <style>
 .app-footer {{
+    width: 100%; box-sizing: border-box;
     margin-top: 50px; padding: 40px 32px 24px; border-top: 1px solid {palette['border']};
     background: {palette['card']}; border-radius: 16px 16px 0 0;
 }}
