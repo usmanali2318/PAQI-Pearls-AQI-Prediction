@@ -748,11 +748,11 @@ else:
 st.markdown(f"""
 <style>
 .app-footer {{
-    width: 100% !important; box-sizing: border-box;
-    margin-top: 50px; padding: 40px 32px 24px; border-top: 1px solid {palette['border']};
-    background: {palette['card']}; border-radius: 16px 16px 0 0;
+    width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;
+    box-sizing: border-box;
+    margin-top: 50px; padding: 40px calc(2rem + 3vw) 24px; border-top: 1px solid {palette['border']};
+    background: {palette['card']}; border-radius: 0;
 }}
-[data-testid="stElementContainer"]:has(#nav-footer) {{ width: 100% !important; }}
 .app-footer .footer-cols {{
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 28px;
 }}
