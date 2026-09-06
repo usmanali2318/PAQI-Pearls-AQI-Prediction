@@ -2,6 +2,8 @@
 #    uv export --no-hashes --format requirements-txt
 altair==6.2.2
     # via streamlit
+annotated-types==0.8.0
+    # via pydantic
 anyio==4.14.2
     # via
     #   httpx
@@ -54,11 +56,17 @@ confluent-kafka==2.11.1
 contourpy==1.3.3
     # via matplotlib
 cryptography==49.0.0
-    # via pymysql
+    # via
+    #   pyjwt
+    #   pymysql
 cycler==0.12.1
     # via matplotlib
 deprecated==1.3.1 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'
     # via hops-deltalake
+deprecation==2.1.0
+    # via
+    #   postgrest
+    #   storage3
 fastavro==1.12.0
     # via hopsworks
 fonttools==4.63.0
@@ -81,6 +89,8 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+h2==4.4.1
+    # via httpx
 hops-deltalake==1.4.0.post121 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'
     # via hopsworks
 hopsworks==5.0.3
@@ -89,17 +99,28 @@ hopsworks-aiomysql==0.2.2
     # via hopsworks
 hopsworks-apigen==1.0.5
     # via hopsworks
+hpack==4.2.0
+    # via h2
 httpcore==1.0.9
     # via httpx
 httptools==0.8.0
     # via streamlit
 httpx==0.28.1
-    # via hopsworks
+    # via
+    #   hopsworks
+    #   postgrest
+    #   storage3
+    #   supabase
+    #   supabase-auth
+    #   supabase-functions
+hyperframe==6.1.0
+    # via h2
 idna==3.18
     # via
     #   anyio
     #   httpx
     #   requests
+    #   yarl
 itsdangerous==2.2.0
     # via streamlit
 javaobj-py3==0.5.0
@@ -138,6 +159,8 @@ matplotlib==3.11.1
     # via catboost
 mock==5.2.0
     # via hopsworks
+multidict==6.7.1
+    # via yarl
 narwhals==2.24.0
     # via
     #   altair
@@ -188,6 +211,7 @@ packaging==26.2
     # via
     #   altair
     #   build
+    #   deprecation
     #   hopsworks
     #   matplotlib
     #   plotly
@@ -206,6 +230,10 @@ pillow==12.3.0
     #   streamlit
 plotly==6.9.0
     # via catboost
+postgrest==2.31.0
+    # via supabase
+propcache==0.5.2
+    # via yarl
 protobuf==4.25.9
     # via
     #   hopsworks
@@ -224,12 +252,22 @@ pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementatio
     # via cffi
 pycryptodomex==3.23.0
     # via pyjks
+pydantic==2.13.5
+    # via
+    #   postgrest
+    #   realtime
+    #   storage3
+    #   supabase-auth
+pydantic-core==2.46.5
+    # via pydantic
 pydeck==0.9.3
     # via streamlit
 pyhumps==1.6.1
     # via hopsworks
 pyjks==20.0.0
     # via hopsworks
+pyjwt==2.13.0
+    # via supabase-auth
 pymysql==1.2.0
     # via
     #   hopsworks
@@ -249,6 +287,8 @@ python-multipart==0.0.32
     # via streamlit
 pytz==2026.2
     # via pandas
+realtime==2.31.0
+    # via supabase
 referencing==0.37.0
     # via
     #   jsonschema
@@ -297,8 +337,18 @@ sqlalchemy==2.0.41
     #   pandas
 starlette==1.3.1
     # via streamlit
+storage3==2.31.0
+    # via supabase
 streamlit==1.60.0
     # via workspace
+strenum==0.4.15
+    # via supabase-functions
+supabase==2.31.0
+    # via workspace
+supabase-auth==2.31.0
+    # via supabase
+supabase-functions==2.31.0
+    # via supabase
 tenacity==9.1.4
     # via streamlit
 threadpoolctl==3.6.0
@@ -317,8 +367,14 @@ typing-extensions==4.16.0
     # via
     #   altair
     #   grpcio
+    #   pydantic
+    #   pydantic-core
+    #   realtime
     #   sqlalchemy
     #   streamlit
+    #   typing-inspection
+typing-inspection==0.4.4
+    # via pydantic
 tzdata==2026.3
     # via
     #   pandas
@@ -334,9 +390,17 @@ uvicorn==0.52.1
     # via streamlit
 watchdog==6.0.0 ; sys_platform != 'darwin'
     # via streamlit
-websockets==16.1.1
-    # via streamlit
+websockets==15.0.1
+    # via
+    #   realtime
+    #   streamlit
 wrapt==2.2.2 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'
     # via deprecated
 xgboost==3.3.0
     # via workspace
+yarl==1.24.5
+    # via
+    #   postgrest
+    #   storage3
+    #   supabase
+    #   supabase-functions
