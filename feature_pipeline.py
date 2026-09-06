@@ -1,7 +1,6 @@
 import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
-# import hopsworks  # commented out during Supabase migration - rollback: uncomment this + push_to_hopsworks below
 from supabase import create_client
 
 OWM_KEY = os.environ["OPENWEATHER_API_KEY"]
@@ -134,30 +133,6 @@ def fetch_features() -> pd.DataFrame:
     df[float_cols] = df[float_cols].astype("float64")
     df[["timestamp", "hour", "day", "month", "day_of_week"]] = df[["timestamp", "hour", "day", "month", "day_of_week"]].astype("int64")
     return df
-
-# --- Hopsworks version, kept for rollback - not used while on Supabase ---
-"""
-def push_to_hopsworks(df: pd.DataFrame):
-    project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
-    fs = project.get_feature_store()
-    fg = fs.get_or_create_feature_group(
-        name="multi_city_aqi_features", version=1, primary_key=["timestamp", "city"], event_time="timestamp",
-        description="Hourly AQI (Open-Meteo, official US AQI) + weather + 5-district features for 5 Pakistani cities")
-    # used_fallback isn't in the existing schema yet (get_or_create only creates on
-    # first-ever run, it doesn't add columns to a feature group that already exists).
-    # Drop it before insert for now - still printed in logs above for auditability.
-    df = df.drop(columns=["used_fallback"], errors="ignore")
-    for attempt in range(3):
-        try:
-            fg.insert(df)
-            return
-        except Exception as e:
-            if attempt < 2:
-                print(f"Insert failed ({e}), retrying in 30s...")
-                time.sleep(30)
-            else:
-                raise
-"""
 
 def push_to_supabase(df: pd.DataFrame):
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])

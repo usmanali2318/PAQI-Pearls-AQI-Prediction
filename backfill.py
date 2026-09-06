@@ -1,6 +1,5 @@
 import os, time, requests, pandas as pd, numpy as np
 from datetime import datetime, timedelta, timezone
-# import hopsworks  # commented out during Supabase migration - rollback: uncomment this + push_to_hopsworks below
 from supabase import create_client
 
 DAYS_BACK = 1095
@@ -115,15 +114,6 @@ def build_dataset():
     df[float_cols] = df[float_cols].astype("float64")
     df[["timestamp", "hour", "day", "month", "day_of_week"]] = df[["timestamp", "hour", "day", "month", "day_of_week"]].astype("int64")
     return df
-
-# --- Hopsworks version, kept for rollback - not used while on Supabase ---
-"""
-def push_to_hopsworks(df):
-    project = hopsworks.login(api_key_value=os.environ["HOPSWORKS_API_KEY"], project=os.environ["HOPSWORKS_PROJECT"])
-    fg = project.get_feature_store().get_or_create_feature_group(
-        name="multi_city_aqi_features", version=1, primary_key=["timestamp", "city"], event_time="timestamp")
-    fg.insert(df)
-"""
 
 def push_to_supabase(df, chunk_size=1000):
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])

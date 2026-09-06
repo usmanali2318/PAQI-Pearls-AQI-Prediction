@@ -421,8 +421,8 @@ try:
     with st.spinner("Loading latest AQI data..."):
         raw_df = load_recent_data(sb, history_df)
 except Exception:
-    st.error("Hopsworks' live data service is down and there's no cached data yet to fall back on. "
-             "This is an outage on Hopsworks' end, not this app - please try again shortly.")
+    st.error("Live data service is down and there's no cached data yet to fall back on. "
+             "This is an outage upstream, not this app - please try again shortly.")
     st.stop()
 cities = sorted(raw_df["city"].unique())
 
