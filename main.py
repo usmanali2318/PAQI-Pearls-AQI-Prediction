@@ -453,12 +453,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown(
-    '<p class="app-blurb">Machine-learning powered 3-day air quality forecasts for major '
-    "Pakistani cities, combining live pollutant readings with weather and seasonal patterns.</p>",
-    unsafe_allow_html=True,
-)
-
 st.markdown('<div id="nav-home"></div>', unsafe_allow_html=True)
 with st.container(key="city_row"):
     title_col, label_col, sel_col, btn_col = st.columns([3, 0.8, 1.3, 1], vertical_alignment="center")
@@ -749,3 +743,23 @@ else:
         "Rerun training_pipeline.py to generate it.</p>",
         unsafe_allow_html=True,
     )
+
+st.markdown(f"""
+<style>
+.app-footer {{
+    margin-top: 40px; padding: 24px 0; border-top: 1px solid {palette['border']};
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    color: {palette['text']}; opacity: 0.85; font-size: 0.9rem;
+}}
+.app-footer a {{ color: {palette['accent']}; text-decoration: none; margin-left: 16px; }}
+.app-footer a:hover {{ text-decoration: underline; }}
+</style>
+<div class="app-footer">
+    <span>Built by Usman Ali &middot; questions, bugs, or want to know how this works? Reach out.</span>
+    <span>
+        <a href="https://www.linkedin.com/in/syedusmanali2318/" target="_blank">LinkedIn</a>
+        <a href="https://github.com/usmanali2318/PAQI-Pearls-AQI-Prediction" target="_blank">GitHub</a>
+        <a href="mailto:susmanali18705@gmail.com">Email</a>
+    </span>
+</div>
+""", unsafe_allow_html=True)
