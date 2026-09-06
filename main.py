@@ -768,7 +768,7 @@ st.markdown(f"""
 .app-footer {{
     width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;
     box-sizing: border-box;
-    margin-top: 50px; padding: 40px 210px 24px calc(2rem + 3vw); border-top: 1px solid {palette['border']};
+    margin-top: 50px; margin-bottom: -2rem; padding: 40px 210px 40px calc(2rem + 3vw); border-top: 1px solid {palette['border']};
     background: {palette['card']}88; backdrop-filter: blur(12px); border-radius: 0;
 }}
 .app-footer .footer-cols {{
