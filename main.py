@@ -769,7 +769,7 @@ st.markdown(f"""
     width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;
     box-sizing: border-box;
     margin-top: 50px; padding: 40px 210px 24px calc(2rem + 3vw); border-top: 1px solid {palette['border']};
-    background: {palette['card']}; border-radius: 0;
+    background: {palette['card']}88; backdrop-filter: blur(12px); border-radius: 0;
 }}
 .app-footer .footer-cols {{
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; margin-bottom: 28px;
