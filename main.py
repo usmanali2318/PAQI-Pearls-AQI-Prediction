@@ -299,6 +299,22 @@ def inject_theme(city_key, dark_mode):
     }
     bindTilt();
     new MutationObserver(bindTilt).observe(doc.body, {childList: true, subtree: true});
+
+    // manually handle side-nav clicks since the browser's native anchor jump
+    // fires before Streamlit's dynamic content is actually in the DOM
+    function bindNavScroll() {
+        doc.querySelectorAll('.side-nav a[href^="#"]').forEach(link => {
+            if (link.dataset.scrollBound) return;
+            link.dataset.scrollBound = "1";
+            link.addEventListener('click', e => {
+                e.preventDefault();
+                const target = doc.getElementById(link.getAttribute('href').slice(1));
+                if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
+            });
+        });
+    }
+    bindNavScroll();
+    new MutationObserver(bindNavScroll).observe(doc.body, {childList: true, subtree: true});
     </script>
     """, height=0)
     return p
