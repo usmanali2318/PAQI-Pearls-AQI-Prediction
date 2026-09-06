@@ -228,6 +228,7 @@ def inject_theme(city_key, dark_mode):
         background: {p['shade']}; z-index: -1;
     }}
     @media (max-width: 900px) {{ .side-nav {{ display: none; }} }}
+    @media (max-width: 900px) {{ .app-footer {{ padding-right: calc(2rem + 3vw) !important; }} }}
     .jump-link {{ color: {p['accent']} !important; font-size: 0.85rem; text-decoration: none; }}
     .jump-link:hover {{ text-decoration: underline; }}
 
@@ -767,7 +768,7 @@ st.markdown(f"""
 .app-footer {{
     width: 100vw; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;
     box-sizing: border-box;
-    margin-top: 50px; padding: 40px calc(2rem + 3vw) 24px; border-top: 1px solid {palette['border']};
+    margin-top: 50px; padding: 40px 210px 24px calc(2rem + 3vw); border-top: 1px solid {palette['border']};
     background: {palette['card']}; border-radius: 0;
 }}
 .app-footer .footer-cols {{
