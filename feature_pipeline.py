@@ -134,6 +134,7 @@ def fetch_features() -> pd.DataFrame:
     df[["timestamp", "hour", "day", "month", "day_of_week"]] = df[["timestamp", "hour", "day", "month", "day_of_week"]].astype("int64")
     return df
 
+
 def push_to_supabase(df: pd.DataFrame):
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
     df = df.drop(columns=["used_fallback"], errors="ignore")
